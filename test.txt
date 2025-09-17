@@ -1,0 +1,10 @@
+Hello, World!
+This is a test file for XLR8 editor.
+You can edit this text and test the editor functionality.
+
+Features to test:
+- Insert mode (default)
+- Command mode (press Escape)
+- Navigation with arrow keys
+- Text editing
+- Save and quit commands
