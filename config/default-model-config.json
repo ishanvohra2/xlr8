@@ -1,0 +1,13 @@
+{
+  "defaultModel": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q2_k.gguf",
+  "modelConfig": {
+    "ctx_size": 8192,
+    "temp": 0.7,
+    "top_p": 0.9,
+    "top_k": 40,
+    "device": "cpu",
+    "gpu_layers": 0,
+    "system_prompt": "You are a helpful AI coding assistant. Provide clear, concise, and accurate code suggestions and explanations."
+  },
+  "autoLoad": true
+}

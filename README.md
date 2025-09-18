@@ -72,11 +72,81 @@ src/
 └── index.ts           # Entry point
 ```
 
+## Current Features
+
+✅ **Core Editor Functionality**
+- Open and edit text files
+- Insert and command modes (vim-style)
+- Basic navigation with arrow keys
+- Text editing (insert, delete, newline)
+- Undo/redo functionality (Ctrl+Z/Ctrl+Y)
+
+✅ **Command Mode**
+- `:q` - Quit editor
+- `:w` - Save file
+- `:wq` - Save and quit
+- `:ai edit <prompt>` - AI-powered code editing
+- `:ai ask <question>` - AI-powered code discussion
+
+✅ **LSP Integration**
+- Configurable LSP servers for multiple languages
+- TypeScript/JavaScript, Python, Rust, Go, C/C++, Java support
+- Autocomplete and go-to-definition (Ctrl+D)
+- Real-time diagnostics and error highlighting
+- User-configurable LSP server settings
+
+✅ **Advanced Features**
+- Syntax highlighting
+- Multiple tabs (Ctrl+T, Ctrl+W, Ctrl+Tab)
+- AI Assistant with local LLM
+- Tool-based code editing
+
+## AI Assistant
+
+XLR8 includes an AI assistant powered by local LLMs:
+
+- **`:ai edit <prompt>`** - AI-powered code editing and implementation
+- **`:ai ask <question>`** - Ask questions about your code
+- **Local LLM** - Uses Qwen2.5-Coder-7B-Instruct model
+- **Tool Integration** - AI can read files, analyze code, and make edits
+- **Streaming Responses** - Real-time token streaming
+
+See [AI_DEMO.md](AI_DEMO.md) for detailed usage examples.
+
+## LSP Configuration
+
+XLR8 supports configurable Language Server Protocol (LSP) servers for multiple programming languages:
+
+### Quick Setup
+```bash
+# Create default LSP configuration
+xlr8 --lsp-config
+
+# List available LSP servers
+xlr8 --lsp-list
+```
+
+### Supported Languages
+- **TypeScript/JavaScript** - `typescript-language-server` (enabled by default)
+- **Python** - `pyright`
+- **Rust** - `rust-analyzer`
+- **Go** - `gopls`
+- **C/C++** - `clangd`
+- **Java** - `jdtls`
+- **Lua** - `lua-language-server`
+- **Shell** - `bash-language-server`
+- **JSON** - `vscode-json-languageserver`
+- **YAML** - `yaml-language-server`
+
+### Configuration
+Edit `~/.xlr8/lsp-config.json` to customize LSP servers, enable/disable languages, and configure server-specific settings.
+
+See [LSP_CONFIG_README.md](LSP_CONFIG_README.md) for detailed configuration guide.
+
 ## Next Phases
 
-- **Phase 2**: Commands & Status Bar improvements
-- **Phase 3**: LSP Integration (TypeScript support)
-- **Phase 4**: Syntax highlighting and advanced features
+- **Phase 6**: Advanced features (find/replace, configurable keybindings)
+- **Phase 7**: Plugin system and extensions
 
 ## Development
 
