@@ -113,21 +113,65 @@ xlr8 --lsp-list
 ### AI Model Commands
 
 ```bash
-# Create default model configuration
+# Create default model configuration file
 xlr8 --model-config
 
-# Show current model settings
+# Show current model configuration and settings
 xlr8 --model-show
 
-# Reset model configuration
+# Reset model configuration to defaults
 xlr8 --model-reset
 
-# Configure model parameters
-xlr8 --temp 0.7              # Set temperature (0.0-2.0)
-xlr8 --ctx-size 4096         # Set context size (512-32768)
-xlr8 --device gpu            # Set device (cpu/gpu)
-xlr8 --gpu-layers 32         # Set GPU layers (0-100)
+# Configure individual model parameters
+xlr8 --temp 0.7              # Set temperature (0.0-2.0, default: 0.7)
+xlr8 --ctx-size 8192         # Set context size (512-32768, default: 8192)
+xlr8 --device cpu            # Set device type (cpu/gpu, default: cpu)
+xlr8 --gpu-layers 0          # Set GPU layers (0-100, default: 0)
+
+# The config file will be created at ~/.config/xlr8/model-config.json
+
+# Examples of combining commands
+xlr8 --model-config --temp 0.8 --ctx-size 16384  # Create config and set parameters
+xlr8 --device gpu --gpu-layers 32                # Configure for GPU acceleration
 ```
+
+### Advanced AI Configuration
+
+```bash
+# View detailed configuration information
+xlr8 --model-show
+
+# Example output shows:
+# 🤖 Current Model Configuration:
+# 
+# Model URL: https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/...
+# Context Size: 8192 tokens
+# Temperature: 0.7 (creativity level)
+# Device: cpu
+# GPU Layers: 0
+# Auto Load: true
+
+# Quick setup for different use cases
+xlr8 --temp 0.3 --ctx-size 4096    # Conservative, focused coding
+xlr8 --temp 1.0 --ctx-size 16384   # Creative, large context
+xlr8 --device gpu --gpu-layers 50  # GPU acceleration setup
+```
+
+### AI Configuration Parameters
+
+| Parameter | Range | Default | Description |
+|-----------|-------|---------|-------------|
+| `--temp` | 0.0-2.0 | 0.7 | Controls randomness/creativity. Lower = more focused, Higher = more creative |
+| `--ctx-size` | 512-32768 | 8192 | Maximum context window size in tokens. Larger = more context awareness |
+| `--device` | cpu/gpu | cpu | Processing device. GPU requires compatible hardware |
+| `--gpu-layers` | 0-100 | 0 | Number of model layers to offload to GPU. Higher = more GPU usage |
+
+### Configuration File Locations
+
+- **AI Model Config**: `~/.config/xlr8/model-config.json`
+- **LSP Config**: `~/.config/xlr8/lsp-config.json`
+
+These files are automatically created when you run the respective `--config` commands.
 
 ## ⌨️ Keybindings
 
@@ -169,9 +213,17 @@ xlr8 --gpu-layers 32         # Set GPU layers (0-100)
 - `:w` - Save file
 - `:q` - Quit
 - `:wq` - Save and quit
+
+### AI Commands (in command mode)
 - `:ai ask [question]` - Ask AI about code
 - `:ai edit [instruction]` - Let AI edit your code
 - `:ai complete` - Get AI code completion
+
+### Chat Management Commands
+- `:chat show` - Show AI chat panel
+- `:chat hide` - Hide AI chat panel
+- `:chat clear` - Clear current chat session
+- `:chat scroll` - Scroll through chat history
 
 ## 🔧 Configuration
 
@@ -198,16 +250,17 @@ Create `~/.config/xlr8/model-config.json`:
 
 ```json
 {
-  "defaultModel": "https://huggingface.co/microsoft/DialoGPT-medium/resolve/main/pytorch_model.bin",
+  "defaultModel": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q2_k.gguf",
   "modelConfig": {
-    "ctx_size": 2048,
+    "ctx_size": 8192,
     "temp": 0.7,
     "top_p": 0.9,
     "top_k": 40,
     "device": "cpu",
     "gpu_layers": 0,
-    "system_prompt": "You are a helpful coding assistant."
-  }
+    "system_prompt": "You are a helpful AI coding assistant. Provide clear, concise, and accurate code suggestions and explanations."
+  },
+  "autoLoad": true
 }
 ```
 
