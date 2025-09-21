@@ -1,165 +1,284 @@
-# XLR8 - Terminal-based Code Editor
+# XLR8 - Terminal Code Editor
 
-A fast, terminal-based code editor with vim-like keybindings, written in TypeScript.
+<div align="center">
 
-## Phase 1 Features (Current)
+**A lightning-fast terminal-based code editor with AI integration and LSP support**
 
-✅ **Core Editor Functionality**
-- Open and edit text files
-- Insert and command modes (vim-style)
-- Basic navigation with arrow keys
-- Text editing (insert, delete, newline)
-- Undo/redo functionality (Ctrl+Z/Ctrl+Y)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 
-✅ **Command Mode**
-- `:q` - Quit editor
-- `:w` - Save file (placeholder)
-- `:wq` - Save and quit (placeholder)
+</div>
 
-✅ **Navigation**
-- Arrow keys for movement
-- Home/End keys
-- Scrollable viewport for large files
+## 🚀 Features
 
-## Installation & Usage
+### ⚡ Core Editor Features
+- **Lightning-fast terminal interface** - Vim-inspired keybindings for maximum efficiency
+- **Multi-tab support** - Work with multiple files simultaneously
+- **Syntax highlighting** - Powered by highlight.js for 180+ languages
+- **Undo/Redo system** - Never lose your work with comprehensive history
+- **Smart cursor movement** - Navigate code with precision
 
-1. **Build the project:**
-   ```bash
-   npm run build
-   ```
+### 🧠 AI Integration
+- **Local AI model support** - Powered by Tetherto QVAC SDK
+- **AI-powered code completion** - Get intelligent suggestions as you type
+- **AI code editing** - Let AI rewrite entire files based on your instructions
+- **Interactive chat** - Ask questions about your code and get instant answers
+- **Context-aware assistance** - AI understands your current file and project structure
 
-2. **Run the editor:**
-   ```bash
-   # Open a file
-   npm start test.txt
-   
-   # Or open without a file (creates new document)
-   npm start
-   ```
+### 🔧 Language Server Protocol (LSP)
+- **TypeScript/JavaScript support** - Full IntelliSense with tsserver
+- **Go to definition** - Jump to symbol definitions instantly
+- **Real-time diagnostics** - See errors and warnings as you type
+- **Auto-completion** - Smart code completion from LSP servers
+- **Configurable servers** - Support for multiple LSP servers
 
-3. **Development mode:**
-   ```bash
-   npm run dev test.txt
-   ```
+### 📁 File Management
+- **Smart file loading** - Automatic encoding detection
+- **Save/Save-as functionality** - Flexible file operations
+- **Project-aware** - Understands your workspace structure
+- **Buffer management** - Efficient memory usage for large files
 
-## Key Bindings
+## 📦 Installation
 
-### Insert Mode (Default)
-- **Arrow keys** - Move cursor
-- **Home/End** - Jump to beginning/end of line
-- **Backspace** - Delete character before cursor
-- **Enter** - Insert newline
-- **Escape** - Switch to command mode
-- **Ctrl+Z** - Undo
-- **Ctrl+Y** - Redo
-- **Ctrl+C** - Quit editor
+### Prerequisites
+- Node.js 18+ 
+- npm or yarn
+- GitHub account with Personal Access Token
 
-### Command Mode
-- **Escape** - Return to insert mode
-- **Enter** - Execute command
-- **Backspace** - Delete character in command
-- **:q** - Quit
-- **:w** - Save (placeholder)
-- **:wq** - Save and quit (placeholder)
+### Install from GitHub Package Registry
+```bash
+# 1. Configure npm to use GitHub Package Registry for @ishanvohra2 scope
+echo "@ishanvohra2:registry=https://npm.pkg.github.com" >> ~/.npmrc
 
-## Project Structure
+# 2. Authenticate with GitHub (requires Personal Access Token with 'read:packages' scope)
+# Create token at: https://github.com/settings/tokens
+npm login --scope=@ishanvohra2 --registry=https://npm.pkg.github.com
 
-```
-src/
-├── BufferManager.ts    # Text buffer with undo/redo
-├── TerminalRenderer.ts # UI rendering with terminal-kit
-├── Editor.ts          # Main editor class
-└── index.ts           # Entry point
+# 3. Install globally
+npm install -g @ishanvohra2/xlr8
+
+# 4. Or use directly without installing
+npx @ishanvohra2/xlr8 [filename]
 ```
 
-## Current Features
+### Install from source
+```bash
+git clone https://github.com/ishanvohra2/xlr8.git
+cd xlr8
+npm install
+npm run build
+npm link  # Optional: make xlr8 available globally
+```
 
-✅ **Core Editor Functionality**
-- Open and edit text files
-- Insert and command modes (vim-style)
-- Basic navigation with arrow keys
-- Text editing (insert, delete, newline)
-- Undo/redo functionality (Ctrl+Z/Ctrl+Y)
+### Run locally (development)
+```bash
+npm run dev [filename]
+```
 
-✅ **Command Mode**
-- `:q` - Quit editor
-- `:w` - Save file
-- `:wq` - Save and quit
-- `:ai edit <prompt>` - AI-powered code editing
-- `:ai ask <question>` - AI-powered code discussion
+## 🎮 Usage
 
-✅ **LSP Integration**
-- Configurable LSP servers for multiple languages
-- TypeScript/JavaScript, Python, Rust, Go, C/C++, Java support
-- Autocomplete and go-to-definition (Ctrl+D)
-- Real-time diagnostics and error highlighting
-- User-configurable LSP server settings
+### Basic Commands
 
-✅ **Advanced Features**
-- Syntax highlighting
-- Multiple tabs (Ctrl+T, Ctrl+W, Ctrl+Tab)
-- AI Assistant with local LLM
-- Tool-based code editing
+```bash
+# Start editor with empty buffer
+xlr8
+# or if using npx
+npx @ishanvohra2/xlr8
 
-## AI Assistant
+# Open a specific file
+xlr8 main.ts
+# or if using npx
+npx @ishanvohra2/xlr8 main.ts
 
-XLR8 includes an AI assistant powered by local LLMs:
+# Open with debug mode
+xlr8 --debug main.js
 
-- **`:ai edit <prompt>`** - AI-powered code editing and implementation
-- **`:ai ask <question>`** - Ask questions about your code
-- **Local LLM** - Uses Qwen2.5-Coder-7B-Instruct model
-- **Tool Integration** - AI can read files, analyze code, and make edits
-- **Streaming Responses** - Real-time token streaming
+# Show help
+xlr8 --help
+```
 
-See [AI_DEMO.md](AI_DEMO.md) for detailed usage examples.
+### LSP Commands
 
-## LSP Configuration
-
-XLR8 supports configurable Language Server Protocol (LSP) servers for multiple programming languages:
-
-### Quick Setup
 ```bash
 # Create default LSP configuration
 xlr8 --lsp-config
 
 # List available LSP servers
 xlr8 --lsp-list
+
+# The config file will be created at ~/.config/xlr8/lsp-config.json
 ```
 
-### Supported Languages
-- **TypeScript/JavaScript** - `typescript-language-server` (enabled by default)
-- **Python** - `pyright`
-- **Rust** - `rust-analyzer`
-- **Go** - `gopls`
-- **C/C++** - `clangd`
-- **Java** - `jdtls`
-- **Lua** - `lua-language-server`
-- **Shell** - `bash-language-server`
-- **JSON** - `vscode-json-languageserver`
-- **YAML** - `yaml-language-server`
-
-### Configuration
-Edit `~/.xlr8/lsp-config.json` to customize LSP servers, enable/disable languages, and configure server-specific settings.
-
-See [LSP_CONFIG_README.md](LSP_CONFIG_README.md) for detailed configuration guide.
-
-## Next Phases
-
-- **Phase 6**: Advanced features (find/replace, configurable keybindings)
-- **Phase 7**: Plugin system and extensions
-
-## Development
+### AI Model Commands
 
 ```bash
-# Install dependencies
+# Create default model configuration
+xlr8 --model-config
+
+# Show current model settings
+xlr8 --model-show
+
+# Reset model configuration
+xlr8 --model-reset
+
+# Configure model parameters
+xlr8 --temp 0.7              # Set temperature (0.0-2.0)
+xlr8 --ctx-size 4096         # Set context size (512-32768)
+xlr8 --device gpu            # Set device (cpu/gpu)
+xlr8 --gpu-layers 32         # Set GPU layers (0-100)
+```
+
+## ⌨️ Keybindings
+
+### Navigation
+- `h/j/k/l` - Move cursor left/down/up/right
+- `w/b` - Move by word forward/backward
+- `0/$` - Move to beginning/end of line
+- `gg/G` - Go to first/last line
+- `Ctrl+D` - Go to definition (LSP)
+
+### Editing
+- `i/a` - Enter insert mode (before/after cursor)
+- `I/A` - Insert at beginning/end of line
+- `o/O` - Open new line below/above
+- `x` - Delete character
+- `dd` - Delete line
+- `yy` - Copy line
+- `p` - Paste
+
+### File Operations
+- `Ctrl+S` - Save file
+- `Ctrl+Q` - Quit editor
+- `Ctrl+Z` - Undo
+- `Ctrl+Y` - Redo
+
+### Tab Management
+- `Ctrl+T` - New tab
+- `Ctrl+W` - Close current tab
+- `Ctrl+Tab` - Next tab
+- `Ctrl+Shift+Tab` - Previous tab
+
+### AI Features
+- `Shift+Tab` - Trigger AI completion (in insert mode)
+- `Ctrl+Shift+Z` - Undo AI edit
+- `Ctrl+H` - Toggle chat panel
+- `Ctrl+J/K` - Scroll chat up/down
+
+### Command Mode
+- `:w` - Save file
+- `:q` - Quit
+- `:wq` - Save and quit
+- `:ai ask [question]` - Ask AI about code
+- `:ai edit [instruction]` - Let AI edit your code
+- `:ai complete` - Get AI code completion
+
+## 🔧 Configuration
+
+### LSP Configuration
+Create `~/.config/xlr8/lsp-config.json`:
+
+```json
+{
+  "servers": [
+    {
+      "name": "typescript-language-server",
+      "command": "typescript-language-server",
+      "args": ["--stdio"],
+      "fileExtensions": [".ts", ".tsx", ".js", ".jsx"],
+      "enabled": true
+    }
+  ],
+  "defaultServer": "typescript-language-server"
+}
+```
+
+### AI Model Configuration
+Create `~/.config/xlr8/model-config.json`:
+
+```json
+{
+  "defaultModel": "https://huggingface.co/microsoft/DialoGPT-medium/resolve/main/pytorch_model.bin",
+  "modelConfig": {
+    "ctx_size": 2048,
+    "temp": 0.7,
+    "top_p": 0.9,
+    "top_k": 40,
+    "device": "cpu",
+    "gpu_layers": 0,
+    "system_prompt": "You are a helpful coding assistant."
+  }
+}
+```
+
+## 🏗️ Architecture
+
+XLR8 is built with a modular architecture:
+
+- **Editor** - Main editor controller and event handling
+- **BufferManager** - Text buffer operations and cursor management
+- **TabManager** - Multi-tab functionality
+- **LSPManager** - Language Server Protocol integration
+- **InferenceManager** - AI model management and inference
+- **ChatManager** - AI chat session management
+- **TerminalRenderer** - Terminal UI rendering and display
+- **SyntaxHighlighter** - Code syntax highlighting
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+### Development Setup
+
+```bash
+git clone https://github.com/yourusername/xlr8.git
+cd xlr8
 npm install
-
-# Build
-npm run build
-
-# Run in development
 npm run dev
+```
 
-# Test
+### Running Tests
+
+```bash
 npm test
 ```
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **Ben 10 Series** - Inspiration for the XLR8 name and logo design
+- **Vim** - Keybinding inspiration and modal editing concepts
+- **VS Code** - LSP integration patterns
+- **Tetherto QVAC SDK** - AI model integration
+- **highlight.js** - Syntax highlighting engine
+- **terminal-kit** - Terminal interface library
+
+## 🐛 Known Issues
+
+- Chat panel scrolling may be slow with very long conversations
+- Some LSP servers may require additional configuration
+- AI model loading can take time on first startup
+
+## 🗺️ Roadmap
+
+- [ ] Plugin system for extensibility
+- [ ] More LSP server configurations
+- [ ] Improved AI model selection
+- [ ] File tree explorer
+- [ ] Search and replace functionality
+- [ ] Git integration
+- [ ] Themes and customization
+- [ ] Performance optimizations
+
+---
+
+<div align="center">
+
+**Made with ⚡ by the XLR8 team**
+
+*"It's hero time!"* - Ben Tennyson
+
+</div>

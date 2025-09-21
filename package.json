@@ -1,31 +1,57 @@
 {
-  "name": "xlr8",
+  "name": "@ishanvohra2/xlr8",
   "version": "0.1.0",
   "description": "Terminal-based Code Editor with JS/TS LSP",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "xlr8": "dist/index.js"
   },
+  "files": [
+    "dist/**/*",
+    "config/**/*",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "ts-node src/index.ts",
     "start": "node dist/index.js",
-    "test": "jest"
+    "test": "jest",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "editor",
     "terminal",
     "vim",
     "lsp",
-    "typescript"
+    "typescript",
+    "code-editor",
+    "cli",
+    "ai-powered",
+    "syntax-highlighting"
   ],
-  "author": "",
+  "author": "Ishan Vohra",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ishanvohra2/xlr8.git"
+  },
+  "homepage": "https://github.com/ishanvohra2/xlr8#readme",
+  "bugs": {
+    "url": "https://github.com/ishanvohra2/xlr8/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "dependencies": {
     "@types/highlight.js": "^9.12.4",
     "highlight.js": "^11.11.1",
     "terminal-kit": "^3.0.0",
-    "@tetherto/qvac-sdk": "file:tetherto-qvac-sdk-0.1.0.tgz"
+    "@tetherto/qvac-sdk": "0.1.0"
   },
   "devDependencies": {
     "@types/jest": "^29.0.0",
