@@ -2,6 +2,8 @@
 
 <div align="center">
 
+<img src="logo.jpg" alt="XLR8 Logo" width="200" style="border-radius: 50%; object-fit: cover;"/>
+
 **A lightning-fast terminal-based code editor with AI integration and LSP support**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
