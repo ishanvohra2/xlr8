@@ -71,7 +71,8 @@ export class InferenceManager {
     private async _loadModel(url: string, onProgress?: (progress: ModelProgressUpdate) => void) {
         const modelConfig = this.modelConfigManager.getModelConfig();
         
-        this.modelId = await loadModel(url, {
+        this.modelId = await loadModel({
+            modelSrc: url,
             modelType: "llm",
             modelConfig: {
                 ctx_size: modelConfig.ctx_size,
@@ -90,7 +91,7 @@ export class InferenceManager {
 
     async unloadModel() {
         if (this.modelId) {
-            await unloadModel(this.modelId);
+            await unloadModel({ modelId: this.modelId });
             this.modelId = null;
         }
     }
@@ -104,7 +105,11 @@ export class InferenceManager {
         let result;
         
         try {
-            result = completion(this.modelId, history, true);
+            result = completion({
+                modelId: this.modelId,
+                history: history,
+                stream: true
+            });
             
             for await (const token of result.tokenStream) {
                 onToken(token);

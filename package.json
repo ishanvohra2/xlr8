@@ -51,7 +51,7 @@
     "@types/highlight.js": "^9.12.4",
     "highlight.js": "^11.11.1",
     "terminal-kit": "^3.0.0",
-    "@tetherto/qvac-sdk": "0.1.0"
+    "@tetherto/qvac-sdk": "file:tetherto-qvac-sdk-0.10.0.tgz"
   },
   "devDependencies": {
     "@types/jest": "^29.0.0",
