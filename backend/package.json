@@ -1,0 +1,22 @@
+{
+  "name": "backend",
+  "main": "index.js",
+  "version": "0.1.1",
+  "pear": {
+    "name": "xlr8-backend",
+    "type": "terminal"
+  },
+  "scripts": {
+    "dev": "pear stage dev",
+    "test": "brittle test/*.test.js"
+  },
+  "devDependencies": {
+    "brittle": "^3.0.0",
+    "pear-interface": "^1.0.0"
+  },
+  "dependencies": {
+    "bare-fs": "^4.4.10",
+    "bare-path": "^3.0.0",
+    "bare-subprocess": "^5.1.4"
+  }
+}
