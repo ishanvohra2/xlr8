@@ -30,5 +30,79 @@
   <div id="autocomplete-popup" style="display: none;">
     <ul id="autocomplete-list"></ul>
   </div>
+
+  <!-- AI Chat Panel -->
+  <div id="ai-chat-panel" class="ai-panel" style="display: none;">
+    <div class="ai-panel-header">
+      <h3>AI Chat</h3>
+      <div class="ai-panel-controls">
+        <button id="ai-new-chat-btn" class="ai-btn" title="New Chat">+</button>
+        <button id="ai-close-chat-btn" class="ai-btn" title="Close">×</button>
+      </div>
+    </div>
+    
+    <div id="ai-chat-list" class="ai-chat-list" style="display: none;">
+      <h4>Recent Chats</h4>
+      <div id="ai-chats-container"></div>
+      <button id="ai-start-chat-btn" class="ai-btn-primary">Start New Chat</button>
+    </div>
+    
+    <div id="ai-chat-active" class="ai-chat-active" style="display: none;">
+      <div id="ai-messages-container" class="ai-messages"></div>
+      <div class="ai-input-container">
+        <textarea id="ai-chat-input" class="ai-chat-input" placeholder="Ask about your code..." rows="3"></textarea>
+        <button id="ai-send-btn" class="ai-btn-primary">Send</button>
+      </div>
+    </div>
+
+    <div id="ai-loading-indicator" class="ai-loading" style="display: none;">
+      <div class="ai-spinner"></div>
+      <p>AI is thinking...</p>
+    </div>
+  </div>
+
+  <!-- AI Edit Diff Viewer -->
+  <div id="ai-edit-modal" class="ai-modal" style="display: none;">
+    <div class="ai-modal-content">
+      <div class="ai-modal-header">
+        <h3>AI Code Edit</h3>
+        <button id="ai-close-edit-btn" class="ai-btn">×</button>
+      </div>
+      
+      <div id="ai-edit-input-section">
+        <textarea id="ai-edit-instruction" class="ai-edit-input" placeholder="Describe the changes you want..." rows="3"></textarea>
+        <button id="ai-generate-edit-btn" class="ai-btn-primary">Generate Edit</button>
+      </div>
+
+      <div id="ai-edit-result-section" style="display: none;">
+        <div class="ai-diff-container">
+          <h4>Proposed Changes:</h4>
+          <pre id="ai-diff-display" class="ai-diff-view"></pre>
+        </div>
+        <div class="ai-edit-actions">
+          <button id="ai-accept-edit-btn" class="ai-btn-success">Accept</button>
+          <button id="ai-reject-edit-btn" class="ai-btn-danger">Reject</button>
+        </div>
+      </div>
+
+      <div id="ai-edit-loading" class="ai-loading" style="display: none;">
+        <div class="ai-spinner"></div>
+        <p>Generating edit...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Toolbar (trigger buttons) -->
+  <div id="ai-toolbar">
+    <button id="ai-ask-btn" class="ai-toolbar-btn" title="Ask AI (Ctrl+Shift+A)">
+      <span>💬</span>
+    </button>
+    <button id="ai-edit-btn" class="ai-toolbar-btn" title="Edit with AI (Ctrl+Shift+E)">
+      <span>✏️</span>
+    </button>
+    <div id="ai-model-status" class="ai-model-status" title="AI Model Status">
+      <span class="ai-status-indicator">●</span>
+    </div>
+  </div>
 </body>
 </html>

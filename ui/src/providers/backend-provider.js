@@ -16,6 +16,12 @@ class BackendProvider {
     this.onFileLoaded = null;
     this.onFileSaved = null;
     this.onError = null;
+    this.onAIModelLoading = null;
+    this.onAIModelLoaded = null;
+    this.onAIChatResponseToken = null;
+    this.onAIChatResponseEnd = null;
+    this.onAIEditResponseToken = null;
+    this.onAIEditResponseEnd = null;
   }
 
   /**
@@ -121,6 +127,63 @@ class BackendProvider {
 
       case 'lsp_completion_result':
         this.handleLSPCompletion(message);
+        break;
+
+      // AI Messages
+      case 'ai_model_loading':
+        this.handleAIModelLoading(message);
+        break;
+
+      case 'ai_model_loaded':
+        this.handleAIModelLoaded(message);
+        break;
+
+      case 'ai_chat_created':
+        this.handleAIChatCreated(message);
+        break;
+
+      case 'ai_chats_list':
+        this.handleAIChatsList(message);
+        break;
+
+      case 'ai_chat_data':
+        this.handleAIChatData(message);
+        break;
+
+      case 'ai_chat_deleted':
+        this.handleAIChatDeleted(message);
+        break;
+
+      case 'ai_chat_response_start':
+        this.handleAIChatResponseStart(message);
+        break;
+
+      case 'ai_chat_response_token':
+        this.handleAIChatResponseToken(message);
+        break;
+
+      case 'ai_chat_response_end':
+        this.handleAIChatResponseEnd(message);
+        break;
+
+      case 'ai_chat_response_error':
+        this.handleAIChatResponseError(message);
+        break;
+
+      case 'ai_edit_response_start':
+        this.handleAIEditResponseStart(message);
+        break;
+
+      case 'ai_edit_response_token':
+        this.handleAIEditResponseToken(message);
+        break;
+
+      case 'ai_edit_response_end':
+        this.handleAIEditResponseEnd(message);
+        break;
+
+      case 'ai_edit_response_error':
+        this.handleAIEditResponseError(message);
         break;
 
       case 'error':
@@ -318,6 +381,351 @@ class BackendProvider {
           reject(new Error('LSP completion timeout'));
         }
       }, 10000);
+    });
+  }
+
+  // ============================================================================
+  // AI Message Handlers
+  // ============================================================================
+
+  handleAIModelLoading(message) {
+    console.log('[BackendProvider] AI model loading:', message.progress);
+    if (this.onAIModelLoading) {
+      this.onAIModelLoading(message.progress);
+    }
+  }
+
+  handleAIModelLoaded(message) {
+    console.log('[BackendProvider] AI model loaded:', message.success);
+    if (this.onAIModelLoaded) {
+      this.onAIModelLoaded(message);
+    }
+    
+    const key = 'ai_load_model';
+    const pending = this.pendingRequests.get(key);
+    if (pending) {
+      this.pendingRequests.delete(key);
+      if (message.success) {
+        pending.resolve();
+      } else {
+        pending.reject(new Error(message.error || 'Failed to load model'));
+      }
+    }
+  }
+
+  handleAIChatCreated(message) {
+    const { success, chatId, chat, error } = message;
+    const key = 'ai_create_chat';
+    const pending = this.pendingRequests.get(key);
+    
+    if (pending) {
+      this.pendingRequests.delete(key);
+      if (success) {
+        pending.resolve({ chatId, chat });
+      } else {
+        pending.reject(new Error(error || 'Failed to create chat'));
+      }
+    }
+  }
+
+  handleAIChatsList(message) {
+    const { success, chats, error } = message;
+    const key = 'ai_get_chats';
+    const pending = this.pendingRequests.get(key);
+    
+    if (pending) {
+      this.pendingRequests.delete(key);
+      if (success) {
+        pending.resolve(chats);
+      } else {
+        pending.reject(new Error(error || 'Failed to get chats'));
+      }
+    }
+  }
+
+  handleAIChatData(message) {
+    const { success, chat, error } = message;
+    const key = 'ai_get_chat';
+    const pending = this.pendingRequests.get(key);
+    
+    if (pending) {
+      this.pendingRequests.delete(key);
+      if (success) {
+        pending.resolve(chat);
+      } else {
+        pending.reject(new Error(error || 'Failed to get chat'));
+      }
+    }
+  }
+
+  handleAIChatDeleted(message) {
+    const { success, chatId, error } = message;
+    const key = 'ai_delete_chat';
+    const pending = this.pendingRequests.get(key);
+    
+    if (pending) {
+      this.pendingRequests.delete(key);
+      if (success) {
+        pending.resolve({ chatId });
+      } else {
+        pending.reject(new Error(error || 'Failed to delete chat'));
+      }
+    }
+  }
+
+  handleAIChatResponseStart(message) {
+    console.log('[BackendProvider] AI chat response started:', message.chatId);
+  }
+
+  handleAIChatResponseToken(message) {
+    if (this.onAIChatResponseToken) {
+      this.onAIChatResponseToken(message.chatId, message.token);
+    }
+  }
+
+  handleAIChatResponseEnd(message) {
+    console.log('[BackendProvider] AI chat response ended:', message.chatId);
+    if (this.onAIChatResponseEnd) {
+      this.onAIChatResponseEnd(message.chatId, message.response);
+    }
+    
+    const key = `ai_chat_${message.chatId}`;
+    const pending = this.pendingRequests.get(key);
+    if (pending) {
+      this.pendingRequests.delete(key);
+      pending.resolve(message.response);
+    }
+  }
+
+  handleAIChatResponseError(message) {
+    console.error('[BackendProvider] AI chat error:', message.error);
+    
+    const key = `ai_chat_${message.chatId}`;
+    const pending = this.pendingRequests.get(key);
+    if (pending) {
+      this.pendingRequests.delete(key);
+      pending.reject(new Error(message.error || 'AI chat failed'));
+    }
+  }
+
+  handleAIEditResponseStart(message) {
+    console.log('[BackendProvider] AI edit response started');
+  }
+
+  handleAIEditResponseToken(message) {
+    if (this.onAIEditResponseToken) {
+      this.onAIEditResponseToken(message.token);
+    }
+  }
+
+  handleAIEditResponseEnd(message) {
+    console.log('[BackendProvider] AI edit response ended');
+    if (this.onAIEditResponseEnd) {
+      this.onAIEditResponseEnd(message);
+    }
+    
+    const key = 'ai_edit';
+    const pending = this.pendingRequests.get(key);
+    if (pending) {
+      this.pendingRequests.delete(key);
+      pending.resolve({
+        response: message.response,
+        extractedCode: message.extractedCode,
+        diff: message.diff,
+        originalCode: message.originalCode
+      });
+    }
+  }
+
+  handleAIEditResponseError(message) {
+    console.error('[BackendProvider] AI edit error:', message.error);
+    
+    const key = 'ai_edit';
+    const pending = this.pendingRequests.get(key);
+    if (pending) {
+      this.pendingRequests.delete(key);
+      pending.reject(new Error(message.error || 'AI edit failed'));
+    }
+  }
+
+  // ============================================================================
+  // AI Operations (Public API)
+  // ============================================================================
+
+  /**
+   * Manually load AI model (if not already loaded on startup)
+   * @returns {Promise<void>}
+   */
+  async loadAIModel() {
+    return new Promise((resolve, reject) => {
+      const key = 'ai_load_model';
+      this.pendingRequests.set(key, { resolve, reject });
+
+      this.sendMessage({
+        type: 'ai_load_model'
+      });
+
+      // Timeout after 5 minutes (model loading can take time)
+      setTimeout(() => {
+        if (this.pendingRequests.has(key)) {
+          this.pendingRequests.delete(key);
+          reject(new Error('AI model load timeout'));
+        }
+      }, 300000);
+    });
+  }
+
+  /**
+   * Create a new chat
+   * @param {string} filePath - Associated file path (optional)
+   * @param {string} title - Chat title (optional)
+   * @returns {Promise<{chatId: string, chat: Object}>}
+   */
+  async createChat(filePath = null, title = null) {
+    return new Promise((resolve, reject) => {
+      const key = 'ai_create_chat';
+      this.pendingRequests.set(key, { resolve, reject });
+
+      this.sendMessage({
+        type: 'ai_create_chat',
+        filePath,
+        title
+      });
+
+      setTimeout(() => {
+        if (this.pendingRequests.has(key)) {
+          this.pendingRequests.delete(key);
+          reject(new Error('Create chat timeout'));
+        }
+      }, 10000);
+    });
+  }
+
+  /**
+   * Get all chats or chats for a specific file
+   * @param {string} filePath - File path (optional)
+   * @returns {Promise<Array>} Array of chat objects
+   */
+  async getChats(filePath = null) {
+    return new Promise((resolve, reject) => {
+      const key = 'ai_get_chats';
+      this.pendingRequests.set(key, { resolve, reject });
+
+      this.sendMessage({
+        type: 'ai_get_chats',
+        filePath
+      });
+
+      setTimeout(() => {
+        if (this.pendingRequests.has(key)) {
+          this.pendingRequests.delete(key);
+          reject(new Error('Get chats timeout'));
+        }
+      }, 10000);
+    });
+  }
+
+  /**
+   * Get a specific chat
+   * @param {string} chatId - Chat ID
+   * @returns {Promise<Object>} Chat object
+   */
+  async getChat(chatId) {
+    return new Promise((resolve, reject) => {
+      const key = 'ai_get_chat';
+      this.pendingRequests.set(key, { resolve, reject });
+
+      this.sendMessage({
+        type: 'ai_get_chat',
+        chatId
+      });
+
+      setTimeout(() => {
+        if (this.pendingRequests.has(key)) {
+          this.pendingRequests.delete(key);
+          reject(new Error('Get chat timeout'));
+        }
+      }, 10000);
+    });
+  }
+
+  /**
+   * Delete a chat
+   * @param {string} chatId - Chat ID
+   * @returns {Promise<{chatId: string}>}
+   */
+  async deleteChat(chatId) {
+    return new Promise((resolve, reject) => {
+      const key = 'ai_delete_chat';
+      this.pendingRequests.set(key, { resolve, reject });
+
+      this.sendMessage({
+        type: 'ai_delete_chat',
+        chatId
+      });
+
+      setTimeout(() => {
+        if (this.pendingRequests.has(key)) {
+          this.pendingRequests.delete(key);
+          reject(new Error('Delete chat timeout'));
+        }
+      }, 10000);
+    });
+  }
+
+  /**
+   * Send a chat message (Ask feature)
+   * @param {string} chatId - Chat ID
+   * @param {string} question - User's question
+   * @param {Object} context - File context
+   * @returns {Promise<string>} AI response
+   */
+  async sendChatMessage(chatId, question, context = {}) {
+    return new Promise((resolve, reject) => {
+      const key = `ai_chat_${chatId}`;
+      this.pendingRequests.set(key, { resolve, reject });
+
+      this.sendMessage({
+        type: 'ai_chat_request',
+        chatId,
+        question,
+        context
+      });
+
+      // Timeout after 2 minutes
+      setTimeout(() => {
+        if (this.pendingRequests.has(key)) {
+          this.pendingRequests.delete(key);
+          reject(new Error('Chat timeout'));
+        }
+      }, 120000);
+    });
+  }
+
+  /**
+   * Request code edit (Edit feature)
+   * @param {string} instruction - Edit instruction
+   * @param {Object} context - File context (content, selection, etc.)
+   * @returns {Promise<Object>} Edit result with diff
+   */
+  async requestEdit(instruction, context) {
+    return new Promise((resolve, reject) => {
+      const key = 'ai_edit';
+      this.pendingRequests.set(key, { resolve, reject });
+
+      this.sendMessage({
+        type: 'ai_edit_request',
+        instruction,
+        context
+      });
+
+      // Timeout after 2 minutes
+      setTimeout(() => {
+        if (this.pendingRequests.has(key)) {
+          this.pendingRequests.delete(key);
+          reject(new Error('Edit timeout'));
+        }
+      }, 120000);
     });
   }
 

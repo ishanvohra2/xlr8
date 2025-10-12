@@ -2,6 +2,9 @@
 const fs = require("bare-fs").promises; // Use promises API
 const { WorkerManager } = require("./WorkerManager");
 const { LSPManager } = require("./LSPManager");
+const { InferenceManager } = require("./InferenceManager");
+const { ChatHistoryManager } = require("./ChatHistoryManager");
+const { DiffUtil } = require("./DiffUtil");
 
 const MessageTypes = Object.freeze({
     EXIT: "exit",
@@ -11,11 +14,22 @@ const MessageTypes = Object.freeze({
     LSP_START: "lsp_start",
     LSP_STOP: "lsp_stop",
     LSP_COMPLETION: "lsp_completion",
-    LSP_DIAGNOSTICS: "lsp_diagnostics"
+    LSP_DIAGNOSTICS: "lsp_diagnostics",
+
+    // AI Messages
+    AI_LOAD_MODEL: "ai_load_model",
+    AI_CHAT_REQUEST: "ai_chat_request",
+    AI_EDIT_REQUEST: "ai_edit_request",
+    AI_CREATE_CHAT: "ai_create_chat",
+    AI_GET_CHATS: "ai_get_chats",
+    AI_DELETE_CHAT: "ai_delete_chat",
+    AI_GET_CHAT: "ai_get_chat"
   });
 
 const workerManager = new WorkerManager();
 const lspManager = new LSPManager();
+const inferenceManager = new InferenceManager();
+const chatHistoryManager = new ChatHistoryManager();
 
 // Initialize message buffer for length-prefixed protocol
 let messageBuffer = '';
@@ -23,7 +37,33 @@ let messageBuffer = '';
 async function cleanup() {
     console.log("[Worker] Cleanup started");
     lspManager.stopAll();
+    await inferenceManager.unloadLLM();
     console.log("[Worker] Cleanup complete");
+}
+
+// Load AI model on startup
+async function initializeAI() {
+    try {
+        console.log("[Worker] Loading AI model on startup...");
+        await inferenceManager.loadLLM((progress) => {
+            workerManager.sendMessage({
+                type: 'ai_model_loading',
+                progress
+            });
+        });
+        workerManager.sendMessage({
+            type: 'ai_model_loaded',
+            success: true
+        });
+        console.log("[Worker] AI model loaded successfully");
+    } catch (error) {
+        console.error("[Worker] Failed to load AI model:", error);
+        workerManager.sendMessage({
+            type: 'ai_model_loaded',
+            success: false,
+            error: error.message
+        });
+    }
 }
   
   workerManager.setupCleanupHandler(async () => {
@@ -85,6 +125,9 @@ async function cleanup() {
   });
   
   workerManager.sendMessage({ type: "worker_initialized" });
+  
+  // Initialize AI model
+  initializeAI();
   
   /**
    * Parses and validates incoming message structure
@@ -213,6 +256,36 @@ function validateMessageTypeSpecificFields(message) {
                 throw new Error("content is required for LSP_COMPLETION message");
             }
             break;
+
+        case MessageTypes.AI_CHAT_REQUEST:
+            if (!message.question) {
+                throw new Error("question is required for AI_CHAT_REQUEST message");
+            }
+            if (!message.chatId) {
+                throw new Error("chatId is required for AI_CHAT_REQUEST message");
+            }
+            break;
+
+        case MessageTypes.AI_EDIT_REQUEST:
+            if (!message.instruction) {
+                throw new Error("instruction is required for AI_EDIT_REQUEST message");
+            }
+            if (!message.context) {
+                throw new Error("context is required for AI_EDIT_REQUEST message");
+            }
+            break;
+
+        case MessageTypes.AI_DELETE_CHAT:
+            if (!message.chatId) {
+                throw new Error("chatId is required for AI_DELETE_CHAT message");
+            }
+            break;
+
+        case MessageTypes.AI_GET_CHAT:
+            if (!message.chatId) {
+                throw new Error("chatId is required for AI_GET_CHAT message");
+            }
+            break;
             
         default: break;
     }
@@ -317,12 +390,281 @@ async function handleLSPCompletion(message) {
     }
 }
 
+// ============================================================================
+// AI Message Handlers
+// ============================================================================
+
+async function handleAILoadModel(message) {
+    try {
+        console.log('[Worker] Manual AI model load requested');
+        
+        if (inferenceManager.isLoaded()) {
+            workerManager.sendMessage({
+                type: 'ai_model_loaded',
+                success: true,
+                alreadyLoaded: true
+            });
+            return;
+        }
+        
+        await inferenceManager.loadLLM((progress) => {
+            workerManager.sendMessage({
+                type: 'ai_model_loading',
+                progress
+            });
+        });
+        
+        workerManager.sendMessage({
+            type: 'ai_model_loaded',
+            success: true
+        });
+        
+        console.log('[Worker] AI model loaded');
+    } catch (error) {
+        console.error('[Worker] Error loading AI model:', error);
+        workerManager.sendMessage({
+            type: 'ai_model_loaded',
+            success: false,
+            error: error.message
+        });
+    }
+}
+
+async function handleAICreateChat(message) {
+    try {
+        const { filePath, title } = message;
+        
+        const chatId = chatHistoryManager.createChat({ filePath, title });
+        
+        workerManager.sendMessage({
+            type: 'ai_chat_created',
+            success: true,
+            chatId,
+            chat: chatHistoryManager.getChat(chatId)
+        });
+        
+        console.log('[Worker] Chat created:', chatId);
+    } catch (error) {
+        console.error('[Worker] Error creating chat:', error);
+        workerManager.sendMessage({
+            type: 'ai_chat_created',
+            success: false,
+            error: error.message
+        });
+    }
+}
+
+async function handleAIGetChats(message) {
+    try {
+        const { filePath } = message;
+        
+        let chats;
+        if (filePath) {
+            chats = chatHistoryManager.getChatsForFile(filePath);
+        } else {
+            chats = chatHistoryManager.getAllChats();
+        }
+        
+        workerManager.sendMessage({
+            type: 'ai_chats_list',
+            success: true,
+            chats
+        });
+        
+        console.log('[Worker] Chats retrieved:', chats.length);
+    } catch (error) {
+        console.error('[Worker] Error getting chats:', error);
+        workerManager.sendMessage({
+            type: 'ai_chats_list',
+            success: false,
+            error: error.message
+        });
+    }
+}
+
+async function handleAIGetChat(message) {
+    try {
+        const { chatId } = message;
+        
+        const chat = chatHistoryManager.getChat(chatId);
+        
+        if (!chat) {
+            throw new Error(`Chat not found: ${chatId}`);
+        }
+        
+        workerManager.sendMessage({
+            type: 'ai_chat_data',
+            success: true,
+            chat
+        });
+        
+        console.log('[Worker] Chat retrieved:', chatId);
+    } catch (error) {
+        console.error('[Worker] Error getting chat:', error);
+        workerManager.sendMessage({
+            type: 'ai_chat_data',
+            success: false,
+            error: error.message
+        });
+    }
+}
+
+async function handleAIDeleteChat(message) {
+    try {
+        const { chatId } = message;
+        
+        const success = chatHistoryManager.deleteChat(chatId);
+        
+        if (!success) {
+            throw new Error(`Failed to delete chat: ${chatId}`);
+        }
+        
+        workerManager.sendMessage({
+            type: 'ai_chat_deleted',
+            success: true,
+            chatId
+        });
+        
+        console.log('[Worker] Chat deleted:', chatId);
+    } catch (error) {
+        console.error('[Worker] Error deleting chat:', error);
+        workerManager.sendMessage({
+            type: 'ai_chat_deleted',
+            success: false,
+            error: error.message
+        });
+    }
+}
+
+async function handleAIChatRequest(message) {
+    try {
+        const { chatId, question, context } = message;
+        
+        console.log('[Worker] AI chat request for chat:', chatId);
+        
+        // Verify model is loaded
+        if (!inferenceManager.isLoaded()) {
+            throw new Error('AI model not loaded');
+        }
+        
+        // Get chat history
+        const history = chatHistoryManager.getHistory(chatId);
+        
+        // Add user message to chat
+        chatHistoryManager.addMessage(chatId, 'user', question);
+        
+        // Signal start of response
+        workerManager.sendMessage({
+            type: 'ai_chat_response_start',
+            chatId
+        });
+        
+        // Stream response
+        let fullResponse = '';
+        const response = await inferenceManager.chat({
+            question,
+            context,
+            history,
+            onToken: (token) => {
+                fullResponse += token;
+                workerManager.sendMessage({
+                    type: 'ai_chat_response_token',
+                    chatId,
+                    token
+                });
+            }
+        });
+        
+        // Add assistant response to chat
+        chatHistoryManager.addMessage(chatId, 'assistant', fullResponse);
+        
+        // Signal end of response
+        workerManager.sendMessage({
+            type: 'ai_chat_response_end',
+            chatId,
+            response: fullResponse
+        });
+        
+        console.log('[Worker] AI chat response complete');
+    } catch (error) {
+        console.error('[Worker] Error in AI chat:', error);
+        workerManager.sendMessage({
+            type: 'ai_chat_response_error',
+            chatId: message.chatId,
+            error: error.message
+        });
+    }
+}
+
+async function handleAIEditRequest(message) {
+    try {
+        const { instruction, context } = message;
+        
+        console.log('[Worker] AI edit request');
+        
+        // Verify model is loaded
+        if (!inferenceManager.isLoaded()) {
+            throw new Error('AI model not loaded');
+        }
+        
+        // Signal start of edit
+        workerManager.sendMessage({
+            type: 'ai_edit_response_start'
+        });
+        
+        // Generate edit
+        let fullResponse = '';
+        const response = await inferenceManager.edit({
+            instruction,
+            context,
+            onToken: (token) => {
+                fullResponse += token;
+                workerManager.sendMessage({
+                    type: 'ai_edit_response_token',
+                    token
+                });
+            }
+        });
+        
+        // Extract code from response
+        const extractedCode = DiffUtil.extractCodeFromResponse(fullResponse, context.language);
+        
+        // Generate diff
+        const originalCode = context.selection?.text || context.content || '';
+        const diff = DiffUtil.generateDiff(originalCode, extractedCode);
+        
+        // Signal end of edit
+        workerManager.sendMessage({
+            type: 'ai_edit_response_end',
+            response: fullResponse,
+            extractedCode,
+            diff,
+            originalCode
+        });
+        
+        console.log('[Worker] AI edit response complete');
+    } catch (error) {
+        console.error('[Worker] Error in AI edit:', error);
+        workerManager.sendMessage({
+            type: 'ai_edit_response_error',
+            error: error.message
+        });
+    }
+}
+
 // Message handlers map
 const messageHandlers = {
     [MessageTypes.EXIT]: handleExit,
     [MessageTypes.SAVE_FILE]: handleSaveFile,
     [MessageTypes.LOAD_FILE]: handleLoadFile,
     [MessageTypes.LSP_COMPLETION]: handleLSPCompletion,
+    [MessageTypes.AI_LOAD_MODEL]: handleAILoadModel,
+    [MessageTypes.AI_CREATE_CHAT]: handleAICreateChat,
+    [MessageTypes.AI_GET_CHATS]: handleAIGetChats,
+    [MessageTypes.AI_GET_CHAT]: handleAIGetChat,
+    [MessageTypes.AI_DELETE_CHAT]: handleAIDeleteChat,
+    [MessageTypes.AI_CHAT_REQUEST]: handleAIChatRequest,
+    [MessageTypes.AI_EDIT_REQUEST]: handleAIEditRequest,
 };
   
   /**

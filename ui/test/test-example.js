@@ -51,6 +51,7 @@ async function fetchData(url) {
 // Array methods
 const numbers = [1, 2, 3, 4, 5];
 const doubled = numbers.map(n => n * 2);
+const squared = numbers.map(n => Math.pow(n, 2));
 const sum = numbers.reduce((acc, n) => acc + n, 0);
 
 // Object destructuring

@@ -28,6 +28,7 @@
     "pear-interface": "^1.0.0"
   },
   "dependencies": {
+    "crypto": "^1.0.1",
     "prismjs": "^1.30.0"
   }
 }

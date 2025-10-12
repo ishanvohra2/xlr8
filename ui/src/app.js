@@ -26,6 +26,9 @@ import 'prismjs/components/prism-sql.js';
 // Import Backend Provider for file operations and LSP
 import { backendProvider } from './providers/backend-provider.js';
 
+// Import AI Manager for AI features
+import { AIManager } from './ai-manager.js';
+
 // Import Node.js path module for path resolution
 import path from 'path';
 
@@ -75,6 +78,10 @@ class XLR8Editor {
     this.setEditorReadonly(true); // Start in normal mode (readonly)
     this.updateStatusBar();
     this.editor.focus();
+    
+    // Initialize AI Manager
+    this.aiManager = new AIManager(this);
+    console.log('[XLR8] AI Manager initialized');
     
     console.log('[XLR8] Editor initialized in NORMAL mode. Press "i" to insert, or :e <file> to load a file.');
   }
@@ -876,6 +883,35 @@ class XLR8Editor {
     setTimeout(() => {
       this.updateStatusBar();
     }, 2000);
+  }
+
+  // ============================================================================
+  // Helper methods for AIManager
+  // ============================================================================
+
+  getEditorContent() {
+    return this.editor.value;
+  }
+
+  setEditorContent(content) {
+    this.editor.value = content;
+    this.updateSyntaxHighlighting();
+    this.updateLineNumbers();
+    this.updateStatusBar();
+  }
+
+  getCursorPosition() {
+    return {
+      line: 0,
+      character: this.editor.selectionStart
+    };
+  }
+
+  setCursorPosition(pos) {
+    if (typeof pos.character === 'number') {
+      this.editor.selectionStart = pos.character;
+      this.editor.selectionEnd = pos.character;
+    }
   }
 }
 
