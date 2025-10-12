@@ -1,0 +1,33 @@
+{
+  "name": "xlr8",
+  "version": "0.1.0",
+  "description": "XLR8 - A lightweight, Vim-inspired modal text editor",
+  "main": "index.html",
+  "pear": {
+    "name": "xlr8",
+    "type": "desktop",
+    "links": {
+      "worker": "pear://ayeyjt5juearphgoj6oondamo6n1few1wg65enebx4dw6wzx1byo"
+    },
+    "gui": {
+      "backgroundColor": "#1F2430",
+      "height": "600",
+      "width": "900"
+    }
+  },
+  "type": "module",
+  "license": "MIT",
+  "author": "Ishan Vohra",
+  "scripts": {
+    "dev": "pear run -d .",
+    "start": "pear run -d .",
+    "test": "brittle test/*.test.js"
+  },
+  "devDependencies": {
+    "brittle": "^3.0.0",
+    "pear-interface": "^1.0.0"
+  },
+  "dependencies": {
+    "prismjs": "^1.30.0"
+  }
+}
