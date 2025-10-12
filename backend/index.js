@@ -14,7 +14,10 @@ const MessageTypes = Object.freeze({
     LSP_START: "lsp_start",
     LSP_STOP: "lsp_stop",
     LSP_COMPLETION: "lsp_completion",
+    LSP_DEFINITION: "lsp_definition",
     LSP_DIAGNOSTICS: "lsp_diagnostics",
+
+    PROJECT_SEARCH: "project_search",
 
     // AI Messages
     AI_LOAD_MODEL: "ai_load_model",
@@ -257,6 +260,27 @@ function validateMessageTypeSpecificFields(message) {
             }
             break;
 
+        case MessageTypes.LSP_DEFINITION:
+            if (!message.filePath) {
+                throw new Error("filePath is required for LSP_DEFINITION message");
+            }
+            if (message.line === undefined || message.character === undefined) {
+                throw new Error("line and character are required for LSP_DEFINITION message");
+            }
+            if (!message.content) {
+                throw new Error("content is required for LSP_DEFINITION message");
+            }
+            break;
+
+        case MessageTypes.PROJECT_SEARCH:
+            if (!message.query) {
+                throw new Error("query is required for PROJECT_SEARCH message");
+            }
+            if (!message.searchPath) {
+                throw new Error("searchPath is required for PROJECT_SEARCH message");
+            }
+            break;
+
         case MessageTypes.AI_CHAT_REQUEST:
             if (!message.question) {
                 throw new Error("question is required for AI_CHAT_REQUEST message");
@@ -385,6 +409,151 @@ async function handleLSPCompletion(message) {
             type: 'lsp_completion_result',
             success: false,
             filePath: filePath,
+            error: error.message
+        });
+    }
+}
+
+async function handleLSPDefinition(message) {
+    const { filePath, line, character, content } = message;
+    
+    try {
+        console.log('[Worker] LSP definition request:', filePath, 'at', line, ':', character);
+        
+        // Request definition from LSP manager
+        const definition = await lspManager.requestDefinition(filePath, line, character, content);
+        
+        // Send definition back to UI
+        workerManager.sendMessage({
+            type: 'lsp_definition_result',
+            success: true,
+            filePath: filePath,
+            definition: definition
+        });
+        
+        console.log('[Worker] LSP definition sent:', definition ? 'found' : 'not found');
+    } catch (error) {
+        console.error('[Worker] Error getting LSP definition:', error);
+        
+        // Send error response back to UI
+        workerManager.sendMessage({
+            type: 'lsp_definition_result',
+            success: false,
+            filePath: filePath,
+            error: error.message
+        });
+    }
+}
+
+// ============================================================================
+// Project Search Handler
+// ============================================================================
+
+async function handleProjectSearch(message) {
+    const { query, searchPath } = message;
+    const path = require('bare-path');
+    
+    try {
+        console.log('[Worker] Project search request:', query, 'in', searchPath);
+        
+        const results = [];
+        const lowerQuery = query.toLowerCase();
+        
+        // File extensions to search (text files only)
+        const searchableExtensions = [
+            '.js', '.ts', '.jsx', '.tsx',
+            '.py', '.java', '.c', '.cpp', '.h', '.hpp',
+            '.go', '.rs', '.rb', '.php',
+            '.html', '.css', '.scss', '.sass',
+            '.json', '.yaml', '.yml', '.toml',
+            '.md', '.txt', '.sh', '.bash',
+        ];
+        
+        // Directories to skip
+        const skipDirs = ['node_modules', '.git', 'dist', 'build', '.next', '__pycache__'];
+        
+        // Recursively search directory
+        async function searchDirectory(dirPath) {
+            try {
+                const entries = await fs.readdir(dirPath, { withFileTypes: true });
+                
+                for (const entry of entries) {
+                    const fullPath = path.join(dirPath, entry.name);
+                    
+                    if (entry.isDirectory()) {
+                        // Skip certain directories
+                        if (!skipDirs.includes(entry.name)) {
+                            await searchDirectory(fullPath);
+                        }
+                    } else if (entry.isFile()) {
+                        // Check if file has searchable extension
+                        const ext = path.extname(entry.name);
+                        if (searchableExtensions.includes(ext)) {
+                            await searchFile(fullPath);
+                        }
+                    }
+                }
+            } catch (error) {
+                // Skip directories we can't read
+                console.log('[Worker] Skipping directory:', dirPath, error.message);
+            }
+        }
+        
+        // Search a single file
+        async function searchFile(filePath) {
+            try {
+                const content = await fs.readFile(filePath, 'utf-8');
+                const lines = content.split('\n');
+                
+                lines.forEach((line, index) => {
+                    const lowerLine = line.toLowerCase();
+                    if (lowerLine.includes(lowerQuery)) {
+                        // Find column position
+                        const column = lowerLine.indexOf(lowerQuery);
+                        
+                        // Make path relative to searchPath
+                        const relativePath = path.relative(searchPath, filePath);
+                        
+                        results.push({
+                            file: relativePath,
+                            line: index + 1,
+                            column: column,
+                            text: line.trim() || line,
+                            match: query
+                        });
+                    }
+                });
+            } catch (error) {
+                // Skip files we can't read
+                console.log('[Worker] Skipping file:', filePath, error.message);
+            }
+        }
+        
+        // Start the search
+        await searchDirectory(searchPath);
+        
+        // Limit results to prevent overwhelming UI
+        const limitedResults = results.slice(0, 100);
+        
+        // Send results back to UI
+        workerManager.sendMessage({
+            type: 'project_search_result',
+            success: true,
+            query: query,
+            results: limitedResults,
+            totalCount: results.length,
+            limited: results.length > 100
+        });
+        
+        console.log(`[Worker] Project search complete: ${results.length} results found`);
+    } catch (error) {
+        console.error('[Worker] Error searching project:', error);
+        
+        // Send error response back to UI
+        workerManager.sendMessage({
+            type: 'project_search_result',
+            success: false,
+            query: query,
             error: error.message
         });
     }
@@ -658,6 +827,8 @@ const messageHandlers = {
     [MessageTypes.SAVE_FILE]: handleSaveFile,
     [MessageTypes.LOAD_FILE]: handleLoadFile,
     [MessageTypes.LSP_COMPLETION]: handleLSPCompletion,
+    [MessageTypes.LSP_DEFINITION]: handleLSPDefinition,
+    [MessageTypes.PROJECT_SEARCH]: handleProjectSearch,
     [MessageTypes.AI_LOAD_MODEL]: handleAILoadModel,
     [MessageTypes.AI_CREATE_CHAT]: handleAICreateChat,
     [MessageTypes.AI_GET_CHATS]: handleAIGetChats,

@@ -200,6 +200,29 @@ class LSPClient {
   }
 
   /**
+   * Request definition location for a symbol
+   * @param {string} filePath - File URI (e.g., 'file:///path/to/file.js')
+   * @param {number} line - Line number (0-based)
+   * @param {number} character - Character position (0-based)
+   * @returns {Promise<Array|Object>} Definition location(s)
+   */
+  async definition(filePath, line, character) {
+    if (!this.initialized) {
+      throw new Error('LSP client not initialized');
+    }
+
+    const result = await this.sendRequest('textDocument/definition', {
+      textDocument: {
+        uri: filePath.startsWith('file://') ? filePath : `file://${filePath}`
+      },
+      position: { line, character }
+    });
+
+    // Result can be Location, Location[], or null
+    return result;
+  }
+
+  /**
    * Notify server that a document was opened
    * @param {string} filePath - File path
    * @param {string} languageId - Language ID (e.g., 'javascript', 'typescript')

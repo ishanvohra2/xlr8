@@ -29,6 +29,15 @@ import { backendProvider } from './providers/backend-provider.js';
 // Import AI Manager for AI features
 import { AIManager } from './ai-manager.js';
 
+// Import Buffer Manager for multifile support
+import { BufferManager } from './buffer-manager.js';
+
+// Import Fuzzy Finder for file navigation
+import { FuzzyFinder } from './fuzzy-finder.js';
+
+// Import Project Search for text search
+import { ProjectSearch } from './project-search.js';
+
 // Import Node.js path module for path resolution
 import path from 'path';
 
@@ -38,6 +47,10 @@ class XLR8Editor {
   constructor() {
     // Editor state
     this.mode = 'normal'; // 'normal', 'insert', or 'command'
+    this.bufferManager = new BufferManager();
+    this.waitingForSecondKey = null; // For multi-key commands like 'gd'
+    
+    // Deprecated: kept for backward compatibility during transition
     this.currentFile = null;
     this.isDirty = false;
     this.currentLanguage = 'javascript'; // Default language
@@ -52,6 +65,7 @@ class XLR8Editor {
     this.lineNumbers = document.getElementById('line-numbers');
     this.autocompletePopup = document.getElementById('autocomplete-popup');
     this.autocompleteList = document.getElementById('autocomplete-list');
+    this.tabsContainer = document.getElementById('tabs-container');
 
     // Autocomplete state
     this.completionItems = [];
@@ -83,7 +97,15 @@ class XLR8Editor {
     this.aiManager = new AIManager(this);
     console.log('[XLR8] AI Manager initialized');
     
-    console.log('[XLR8] Editor initialized in NORMAL mode. Press "i" to insert, or :e <file> to load a file.');
+    // Initialize Fuzzy Finder
+    this.fuzzyFinder = new FuzzyFinder(this);
+    console.log('[XLR8] Fuzzy Finder initialized');
+    
+    // Initialize Project Search
+    this.projectSearch = new ProjectSearch(this);
+    console.log('[XLR8] Project Search initialized');
+    
+    console.log('[XLR8] Editor initialized in NORMAL mode. Press "i" to insert, Ctrl+P for files, Ctrl+Shift+F for search, or :e <file> to load.');
   }
 
   setupEventListeners() {
@@ -93,9 +115,16 @@ class XLR8Editor {
     // Editor content changes - with syntax highlighting
     this.editor.addEventListener('input', (e) => {
       this.isDirty = true;
+      
+      // Update buffer with current content
+      if (this.bufferManager.getCurrentBuffer()) {
+        this.bufferManager.updateCurrentBuffer(this.editor.value, true);
+      }
+      
       this.updateSyntaxHighlighting();
       this.updateLineNumbers();
       this.updateStatusBar();
+      this.renderTabs(); // Update dirty indicator on tab
       
       // If completions are visible, filter them as user types
       if (this.autocompletePopup.style.display === 'block' && this.mode === 'insert') {
@@ -241,6 +270,19 @@ class XLR8Editor {
         this.enterCommandMode();
         return;
       }
+      // Go to definition (gd in normal mode)
+      if (e.key === 'g') {
+        // Wait for next key
+        this.waitingForSecondKey = 'd';
+        setTimeout(() => { this.waitingForSecondKey = null; }, 1000);
+        return;
+      }
+      if (this.waitingForSecondKey === 'd' && e.key === 'd') {
+        e.preventDefault();
+        this.waitingForSecondKey = null;
+        this.goToDefinition();
+        return;
+      }
     }
 
     // Global keyboard shortcuts (work in any mode)
@@ -253,6 +295,20 @@ class XLR8Editor {
       if (this.mode === 'insert') {
         this.requestCompletion();
       }
+      return;
+    }
+
+    // Fuzzy Finder (Ctrl+P)
+    if (e.ctrlKey && e.key === 'p') {
+      e.preventDefault();
+      this.fuzzyFinder.open();
+      return;
+    }
+
+    // Project Search (Ctrl+Shift+F)
+    if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+      e.preventDefault();
+      this.projectSearch.open();
       return;
     }
 
@@ -380,15 +436,85 @@ class XLR8Editor {
           await this.quit(true);
           break;
         
+        // Buffer commands
+        case 'bn':
+        case 'bnext':
+          this.switchToNextBuffer();
+          break;
+        
+        case 'bp':
+        case 'bprevious':
+          this.switchToPreviousBuffer();
+          break;
+        
+        case 'b#':
+          this.switchToAlternateBuffer();
+          break;
+        
+        case 'ls':
+        case 'buffers':
+          this.listBuffers();
+          break;
+        
+        case 'bd':
+          this.closeBuffer();
+          break;
+        
+        case 'bd!':
+          this.forceCloseBuffer();
+          break;
+        
         default:
           // Handle :w filename
           if (trimmedCmd.startsWith('w ')) {
             const filename = trimmedCmd.substring(2).trim();
             await this.saveFile(filename);
-          } else if (trimmedCmd.startsWith('e ')) {
+          } 
+          // Handle :e filename
+          else if (trimmedCmd.startsWith('e ')) {
             const filename = trimmedCmd.substring(2).trim();
             await this.loadFile(filename);
-          } else {
+          }
+          // Handle :b <number> (switch to buffer by ID)
+          else if (trimmedCmd.startsWith('b ')) {
+            const bufferIdStr = trimmedCmd.substring(2).trim();
+            const bufferId = parseInt(bufferIdStr, 10);
+            if (isNaN(bufferId)) {
+              this.showMessage(`Invalid buffer number: ${bufferIdStr}`);
+            } else {
+              this.switchToBufferById(bufferId);
+            }
+          }
+          // Handle :bd <number> (close buffer by ID)
+          else if (trimmedCmd.startsWith('bd ')) {
+            const bufferIdStr = trimmedCmd.substring(3).trim();
+            const bufferId = parseInt(bufferIdStr, 10);
+            if (isNaN(bufferId)) {
+              this.showMessage(`Invalid buffer number: ${bufferIdStr}`);
+            } else {
+              this.closeBuffer(bufferId);
+            }
+          }
+          // Handle :bd! <number> (force close buffer by ID)
+          else if (trimmedCmd.startsWith('bd! ')) {
+            const bufferIdStr = trimmedCmd.substring(4).trim();
+            const bufferId = parseInt(bufferIdStr, 10);
+            if (isNaN(bufferId)) {
+              this.showMessage(`Invalid buffer number: ${bufferIdStr}`);
+            } else {
+              this.forceCloseBuffer(bufferId);
+            }
+          }
+          // Handle :grep <pattern> (project search)
+          else if (trimmedCmd.startsWith('grep ')) {
+            const searchPattern = trimmedCmd.substring(5).trim();
+            if (searchPattern) {
+              this.projectSearch.open(searchPattern);
+            } else {
+              this.showMessage('Usage: :grep <pattern>');
+            }
+          }
+          else {
             this.showMessage(`Unknown command: ${trimmedCmd}`);
           }
       }
@@ -475,6 +601,17 @@ class XLR8Editor {
       
       this.isDirty = false;
       this.currentFile = fullPath; // Update to full path
+      
+      // Update buffer if it exists
+      const buffer = this.bufferManager.getCurrentBuffer();
+      if (buffer) {
+        buffer.filePath = fullPath;
+        this.bufferManager.markCurrentBufferSaved();
+      }
+      
+      // Update tabs (dirty flag changed)
+      this.renderTabs();
+      
       this.showMessage(`"${this.currentFile}" written`);
       this.updateStatusBar();
       
@@ -489,28 +626,83 @@ class XLR8Editor {
     console.log('[XLR8] loadFile called with:', filename);
     
     try {
-      // Resolve path relative to CWD
-      const fullPath = path.resolve(filename);
-      console.log('[XLR8] Full path:', fullPath);
+      // Try multiple path resolution strategies
+      let fullPath = null;
+      let fileData = null;
       
-      // Read file using backend provider
-      const { fileData } = await backendProvider.loadFile(fullPath);
+      // Strategy 1: Try as absolute path or relative to CWD
+      try {
+        fullPath = path.resolve(filename);
+        console.log('[XLR8] Trying path:', fullPath);
+        const result = await backendProvider.loadFile(fullPath);
+        fileData = result.fileData;
+      } catch (error) {
+        console.log('[XLR8] First attempt failed:', error.message);
+        
+        // Strategy 2: Try relative to ui/test directory (common for demo files)
+        if (!path.isAbsolute(filename)) {
+          try {
+            // Get the current working directory from Pear
+            const cwd = typeof Pear !== 'undefined' && Pear.cwd ? Pear.cwd() : process.cwd();
+            fullPath = path.join(cwd, 'test', filename);
+            console.log('[XLR8] Trying test directory:', fullPath);
+            const result = await backendProvider.loadFile(fullPath);
+            fileData = result.fileData;
+          } catch (error2) {
+            console.log('[XLR8] Second attempt failed:', error2.message);
+            
+            // Strategy 3: Try ui/test from project root
+            try {
+              const cwd = typeof Pear !== 'undefined' && Pear.cwd ? Pear.cwd() : process.cwd();
+              fullPath = path.join(cwd, 'ui', 'test', filename);
+              console.log('[XLR8] Trying ui/test directory:', fullPath);
+              const result = await backendProvider.loadFile(fullPath);
+              fileData = result.fileData;
+            } catch (error3) {
+              console.log('[XLR8] Third attempt failed:', error3.message);
+              // Re-throw the original error
+              throw new Error(`File not found: ${filename}. Tried multiple locations.`);
+            }
+          }
+        } else {
+          throw error;
+        }
+      }
+      
+      // Check if file is already open in a buffer
+      const existingBufferId = this.bufferManager.findBufferByPath(fullPath);
+      if (existingBufferId !== null) {
+        console.log(`[XLR8] File already open in buffer ${existingBufferId}`);
+        this.switchToBufferById(existingBufferId);
+        return;
+      }
+      
       console.log('[XLR8] File content length:', fileData.length);
       console.log('[XLR8] First 100 chars:', fileData.substring(0, 100));
+      console.log('[XLR8] Successfully loaded from:', fullPath);
       
-      console.log('[XLR8] Setting editor.value...');
-      this.editor.value = fileData;
-      console.log('[XLR8] Editor.value set. Length:', this.editor.value.length);
+      // Save current editor state before loading new file
+      if (this.bufferManager.getCurrentBuffer()) {
+        this.saveEditorStateToBuffer();
+      }
       
-      this.currentFile = fullPath;
-      this.currentLanguage = this.detectLanguage(filename);
-      this.isDirty = false;
+      // Detect language
+      const language = this.detectLanguage(filename);
       
-      console.log('[XLR8] Updating syntax highlighting...');
-      this.updateSyntaxHighlighting();
-      this.updateLineNumbers();
-      this.updateStatusBar();
-      this.showMessage(`"${filename}" loaded (${this.currentLanguage})`);
+      // Create new buffer with the full path
+      const bufferId = this.bufferManager.createBuffer(fullPath, fileData, language);
+      
+      // Switch to new buffer
+      this.bufferManager.switchToBuffer(bufferId);
+      const buffer = this.bufferManager.getCurrentBuffer();
+      
+      // Load into editor
+      this.loadBufferIntoEditor(buffer);
+      
+      // Update tabs
+      this.renderTabs();
+      
+      this.showMessage(`"${filename}" loaded in buffer ${bufferId} (${this.currentLanguage})`);
       
       console.log('[XLR8] File loaded successfully!');
     } catch (error) {
@@ -530,9 +722,14 @@ class XLR8Editor {
   // ============================================================================
 
   async quit(force = false) {
-    if (this.isDirty && !force) {
-      this.showMessage('No write since last change (use :q! to override)');
-      return;
+    // Check for unsaved changes in any buffer
+    if (!force) {
+      const dirtyBuffers = this.bufferManager.getDirtyBuffers();
+      if (dirtyBuffers.length > 0) {
+        const fileList = dirtyBuffers.map(b => b.filePath || '[No Name]').join(', ');
+        this.showMessage(`${dirtyBuffers.length} unsaved buffer(s): ${fileList} (use :q! to override)`);
+        return;
+      }
     }
 
     if (typeof Pear !== 'undefined') {
@@ -883,6 +1080,470 @@ class XLR8Editor {
     setTimeout(() => {
       this.updateStatusBar();
     }, 2000);
+  }
+
+  // ============================================================================
+  // Buffer Management Methods
+  // ============================================================================
+
+  /**
+   * Saves current editor state to the current buffer
+   */
+  saveEditorStateToBuffer() {
+    const buffer = this.bufferManager.getCurrentBuffer();
+    if (!buffer) return;
+    
+    this.bufferManager.updateCurrentBuffer(this.editor.value, this.isDirty);
+    this.bufferManager.saveCurrentBufferState({
+      cursorPosition: this.editor.selectionStart,
+      scrollTop: this.editor.scrollTop,
+      scrollLeft: this.editor.scrollLeft
+    });
+  }
+
+  /**
+   * Loads buffer state into the editor
+   * @param {Object} buffer - Buffer to load
+   */
+  loadBufferIntoEditor(buffer) {
+    if (!buffer) return;
+    
+    console.log(`[XLR8] Loading buffer ${buffer.id}: ${buffer.filePath}`);
+    
+    // Update editor content
+    this.editor.value = buffer.content;
+    
+    // Update editor state
+    this.currentFile = buffer.filePath;
+    this.isDirty = buffer.isDirty;
+    this.currentLanguage = buffer.language;
+    
+    // Restore cursor and scroll position
+    this.editor.selectionStart = buffer.cursorPosition;
+    this.editor.selectionEnd = buffer.cursorPosition;
+    this.editor.scrollTop = buffer.scrollTop;
+    this.editor.scrollLeft = buffer.scrollLeft;
+    
+    // Update UI
+    this.updateSyntaxHighlighting();
+    this.updateLineNumbers();
+    this.updateStatusBar();
+    
+    this.editor.focus();
+  }
+
+  /**
+   * Switches to a different buffer
+   * @param {number} bufferId - Buffer ID to switch to
+   * @returns {boolean} True if successful
+   */
+  switchToBufferById(bufferId) {
+    // Save current editor state before switching
+    this.saveEditorStateToBuffer();
+    
+    const buffer = this.bufferManager.switchToBuffer(bufferId);
+    if (!buffer) {
+      this.showMessage(`Buffer ${bufferId} not found`);
+      return false;
+    }
+    
+    this.loadBufferIntoEditor(buffer);
+    this.renderTabs();
+    this.showMessage(`Switched to buffer ${bufferId}: ${buffer.filePath}`);
+    return true;
+  }
+
+  /**
+   * Switches to next buffer (:bn)
+   */
+  switchToNextBuffer() {
+    this.saveEditorStateToBuffer();
+    
+    const nextBuffer = this.bufferManager.getNextBuffer();
+    if (!nextBuffer) {
+      this.showMessage('No buffers');
+      return;
+    }
+    
+    this.bufferManager.switchToBuffer(nextBuffer.id);
+    this.loadBufferIntoEditor(nextBuffer);
+    this.renderTabs();
+  }
+
+  /**
+   * Switches to previous buffer (:bp)
+   */
+  switchToPreviousBuffer() {
+    this.saveEditorStateToBuffer();
+    
+    const prevBuffer = this.bufferManager.getPreviousBuffer();
+    if (!prevBuffer) {
+      this.showMessage('No buffers');
+      return;
+    }
+    
+    this.bufferManager.switchToBuffer(prevBuffer.id);
+    this.loadBufferIntoEditor(prevBuffer);
+    this.renderTabs();
+  }
+
+  /**
+   * Switches to alternate buffer (:b#)
+   */
+  switchToAlternateBuffer() {
+    this.saveEditorStateToBuffer();
+    
+    const altBuffer = this.bufferManager.getAlternateBuffer();
+    if (!altBuffer) {
+      this.showMessage('No alternate buffer');
+      return;
+    }
+    
+    this.bufferManager.switchToBuffer(altBuffer.id);
+    this.loadBufferIntoEditor(altBuffer);
+    this.renderTabs();
+  }
+
+  /**
+   * Lists all buffers (:ls)
+   */
+  listBuffers() {
+    const buffers = this.bufferManager.listBuffers();
+    if (buffers.length === 0) {
+      this.showMessage('No buffers');
+      return;
+    }
+    
+    const currentId = this.bufferManager.currentBufferId;
+    const lines = buffers.map(buf => {
+      const indicator = buf.id === currentId ? '%' : ' ';
+      const modified = buf.isDirty ? '+' : ' ';
+      const name = buf.filePath || '[No Name]';
+      return `${indicator}${buf.id} ${modified} "${name}"`;
+    });
+    
+    // Show in a temporary display
+    console.log('[XLR8] Buffer list:');
+    lines.forEach(line => console.log(line));
+    
+    // Show summary message
+    this.showMessage(`${buffers.length} buffer(s) - see console for details`);
+  }
+
+  /**
+   * Closes a buffer (:bd)
+   * @param {number} bufferId - Buffer to close (optional, defaults to current)
+   */
+  closeBuffer(bufferId = null) {
+    const targetId = bufferId !== null ? bufferId : this.bufferManager.currentBufferId;
+    
+    if (targetId === null) {
+      this.showMessage('No buffer to close');
+      return;
+    }
+    
+    const buffer = this.bufferManager.getBuffer(targetId);
+    if (!buffer) {
+      this.showMessage(`Buffer ${targetId} not found`);
+      return;
+    }
+    
+    // Check if buffer has unsaved changes
+    if (buffer.isDirty) {
+      this.showMessage(`Buffer ${targetId} has unsaved changes (use :bd! to force)`);
+      return;
+    }
+    
+    const wasCurrentBuffer = (targetId === this.bufferManager.currentBufferId);
+    
+    this.bufferManager.closeBuffer(targetId);
+    
+    // If we closed the current buffer, load the new current buffer
+    if (wasCurrentBuffer) {
+      const newBuffer = this.bufferManager.getCurrentBuffer();
+      if (newBuffer) {
+        this.loadBufferIntoEditor(newBuffer);
+      } else {
+        // No buffers left - clear editor
+        this.editor.value = '';
+        this.currentFile = null;
+        this.isDirty = false;
+        this.currentLanguage = 'javascript';
+        this.updateStatusBar();
+      }
+    }
+    
+    this.renderTabs();
+    this.showMessage(`Buffer ${targetId} closed`);
+  }
+
+  /**
+   * Force closes a buffer (:bd!)
+   * @param {number} bufferId - Buffer to close (optional, defaults to current)
+   */
+  forceCloseBuffer(bufferId = null) {
+    const targetId = bufferId !== null ? bufferId : this.bufferManager.currentBufferId;
+    
+    if (targetId === null) {
+      this.showMessage('No buffer to close');
+      return;
+    }
+    
+    const wasCurrentBuffer = (targetId === this.bufferManager.currentBufferId);
+    
+    this.bufferManager.closeBuffer(targetId);
+    
+    // If we closed the current buffer, load the new current buffer
+    if (wasCurrentBuffer) {
+      const newBuffer = this.bufferManager.getCurrentBuffer();
+      if (newBuffer) {
+        this.loadBufferIntoEditor(newBuffer);
+      } else {
+        // No buffers left - clear editor
+        this.editor.value = '';
+        this.currentFile = null;
+        this.isDirty = false;
+        this.currentLanguage = 'javascript';
+        this.updateStatusBar();
+      }
+    }
+    
+    this.renderTabs();
+    this.showMessage(`Buffer ${targetId} closed (forced)`);
+  }
+
+  // ============================================================================
+  // Tab Bar Methods
+  // ============================================================================
+
+  /**
+   * Renders the tab bar with all open buffers
+   */
+  renderTabs() {
+    const buffers = this.bufferManager.listBuffers();
+    const currentId = this.bufferManager.currentBufferId;
+    
+    // Clear existing tabs
+    this.tabsContainer.innerHTML = '';
+    
+    // Create tabs for each buffer
+    buffers.forEach(buffer => {
+      const tab = this.createTab(buffer, buffer.id === currentId);
+      this.tabsContainer.appendChild(tab);
+    });
+  }
+
+  /**
+   * Creates a tab element for a buffer
+   * @param {Object} buffer - Buffer object
+   * @param {boolean} isActive - Whether this is the active buffer
+   * @returns {HTMLElement} Tab element
+   */
+  createTab(buffer, isActive) {
+    const tab = document.createElement('div');
+    tab.className = 'tab';
+    if (isActive) {
+      tab.classList.add('active');
+    }
+    tab.dataset.bufferId = buffer.id;
+    
+    // Tab name (filename only, not full path)
+    const tabName = document.createElement('span');
+    tabName.className = 'tab-name';
+    const fileName = buffer.filePath ? buffer.filePath.split('/').pop() : '[No Name]';
+    tabName.textContent = fileName;
+    tabName.title = buffer.filePath || '[No Name]'; // Full path on hover
+    tab.appendChild(tabName);
+    
+    // Modified indicator (●)
+    if (buffer.isDirty) {
+      const modified = document.createElement('span');
+      modified.className = 'tab-modified';
+      modified.textContent = '●';
+      modified.title = 'Modified';
+      tab.appendChild(modified);
+    }
+    
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'tab-close';
+    closeBtn.innerHTML = `<svg viewBox="0 0 10 10" fill="none"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+    closeBtn.title = 'Close';
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent tab click
+      this.handleTabClose(buffer.id);
+    });
+    tab.appendChild(closeBtn);
+    
+    // Click to switch buffer
+    tab.addEventListener('click', () => {
+      if (buffer.id !== this.bufferManager.currentBufferId) {
+        this.switchToBufferById(buffer.id);
+      }
+    });
+    
+    return tab;
+  }
+
+  /**
+   * Handles tab close button click
+   * @param {number} bufferId - Buffer to close
+   */
+  handleTabClose(bufferId) {
+    const buffer = this.bufferManager.getBuffer(bufferId);
+    if (!buffer) return;
+    
+    // Check if buffer has unsaved changes
+    if (buffer.isDirty) {
+      // Show confirmation via status bar message
+      const confirmMsg = `Buffer ${bufferId} has unsaved changes. Close anyway? (Run :bd! ${bufferId} to force)`;
+      this.showMessage(confirmMsg);
+      return;
+    }
+    
+    this.closeBuffer(bufferId);
+  }
+
+  // ============================================================================
+  // LSP Go-to-Definition
+  // ============================================================================
+
+  /**
+   * Jump to a specific position in the current file
+   */
+  async jumpToPosition(line, column = 0) {
+    // Move cursor to line and column
+    this.cursorRow = Math.max(0, Math.min(line, this.lines.length - 1));
+    this.cursorCol = Math.max(0, column);
+    
+    // Center the view on the target line
+    const editorHeight = this.editorArea.clientHeight;
+    const lineHeight = 20; // Approximate line height
+    const visibleLines = Math.floor(editorHeight / lineHeight);
+    const centerOffset = Math.floor(visibleLines / 2);
+    
+    this.scrollOffset = Math.max(0, this.cursorRow - centerOffset);
+    
+    // Update display
+    this.renderEditor();
+    this.updateLineNumbers();
+    this.renderStatusBar();
+    
+    console.log(`[XLR8] Jumped to line ${line + 1}, column ${column + 1}`);
+  }
+
+  /**
+   * Go to definition of symbol at cursor
+   */
+  async goToDefinition() {
+    // Only works if we have a file open
+    if (!this.currentFile) {
+      this.showMessage('No file open');
+      return;
+    }
+
+    try {
+      // Get cursor position
+      const text = this.editor.value;
+      const cursorPos = this.editor.selectionStart;
+      
+      // Calculate line and character position
+      const textUpToCursor = text.substring(0, cursorPos);
+      const lines = textUpToCursor.split('\n');
+      const line = lines.length - 1;
+      const character = lines[lines.length - 1].length;
+
+      console.log(`[XLR8] Requesting definition at ${this.currentFile}:${line}:${character}`);
+      this.showMessage('Searching for definition...');
+
+      // Request definition from LSP via backend
+      const definition = await backendProvider.requestDefinition(
+        this.currentFile,
+        line,
+        character,
+        this.editor.value
+      );
+
+      if (!definition) {
+        this.showMessage('Definition not found');
+        return;
+      }
+
+      // Handle definition response
+      // Definition can be Location, Location[], or null
+      let targetLocation = definition;
+      if (Array.isArray(definition) && definition.length > 0) {
+        targetLocation = definition[0]; // Use first location if multiple
+      }
+
+      if (!targetLocation || !targetLocation.uri) {
+        this.showMessage('Definition not found');
+        return;
+      }
+
+      // Parse URI (format: "file:///path/to/file.js")
+      let targetPath = targetLocation.uri;
+      if (targetPath.startsWith('file://')) {
+        targetPath = targetPath.substring(7); // Remove "file://"
+      }
+
+      // Get target position
+      const targetLine = targetLocation.range?.start?.line || 0;
+      const targetCharacter = targetLocation.range?.start?.character || 0;
+
+      console.log(`[XLR8] Definition found at ${targetPath}:${targetLine}:${targetCharacter}`);
+
+      // Check if file is already open
+      const existingBufferId = this.bufferManager.findBufferByPath(targetPath);
+      if (existingBufferId !== null) {
+        // Switch to existing buffer
+        this.switchToBufferById(existingBufferId);
+      } else {
+        // Open the file
+        await this.loadFile(targetPath);
+      }
+
+      // Jump to the position
+      await this.jumpToPosition(targetLine, targetCharacter);
+      
+      this.showMessage(`Jumped to definition in ${targetPath.split('/').pop()}`);
+
+    } catch (error) {
+      console.error('[XLR8] Error in goToDefinition:', error);
+      this.showMessage(`Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Jump to a specific position in the current file
+   * @param {number} line - Line number (0-based)
+   * @param {number} character - Character position (0-based)
+   */
+  async jumpToPosition(line, character) {
+    // Convert line/character to absolute position in textarea
+    const lines = this.editor.value.split('\n');
+    
+    // Calculate absolute position
+    let position = 0;
+    for (let i = 0; i < line && i < lines.length; i++) {
+      position += lines[i].length + 1; // +1 for newline
+    }
+    position += Math.min(character, lines[line]?.length || 0);
+
+    // Set cursor position
+    this.editor.selectionStart = position;
+    this.editor.selectionEnd = position;
+    
+    // Scroll to line
+    // Rough estimate: each line is ~22px
+    const lineHeight = 22;
+    const targetScrollTop = line * lineHeight;
+    this.editor.scrollTop = targetScrollTop;
+    
+    // Focus editor
+    this.editor.focus();
+
+    console.log(`[XLR8] Jumped to line ${line}, character ${character} (position ${position})`);
   }
 
   // ============================================================================

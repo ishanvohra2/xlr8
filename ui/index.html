@@ -9,6 +9,11 @@
 <body>
   <div id="bar"><pear-ctrl></pear-ctrl></div>
   
+  <!-- Tab Bar for Buffer Management -->
+  <div id="tab-bar" class="tab-bar">
+    <div id="tabs-container" class="tabs-container"></div>
+  </div>
+  
   <div id="editor-container">
     <div id="line-numbers"></div>
     <div id="editor-wrapper">
@@ -29,6 +34,53 @@
   
   <div id="autocomplete-popup" style="display: none;">
     <ul id="autocomplete-list"></ul>
+  </div>
+
+  <!-- Fuzzy File Finder (Ctrl+P) -->
+  <div id="fuzzy-finder" class="fuzzy-finder" style="display: none;">
+    <div class="fuzzy-finder-overlay"></div>
+    <div class="fuzzy-finder-modal">
+      <div class="fuzzy-finder-input-container">
+        <svg class="fuzzy-finder-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M7 12C9.76142 12 12 9.76142 12 7C12 4.23858 9.76142 2 7 2C4.23858 2 2 4.23858 2 7C2 9.76142 4.23858 12 7 12Z" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <input type="text" id="fuzzy-finder-input" class="fuzzy-finder-input" placeholder="Search files..." autocomplete="off" />
+        <span class="fuzzy-finder-hint">Ctrl+P</span>
+      </div>
+      <div class="fuzzy-finder-results" id="fuzzy-finder-results">
+        <div class="fuzzy-finder-empty">No files found</div>
+      </div>
+      <div class="fuzzy-finder-footer">
+        <span>↑↓ navigate</span>
+        <span>Enter open</span>
+        <span>Esc close</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Project-Wide Search (Ctrl+Shift+F) -->
+  <div id="project-search" class="project-search" style="display: none;">
+    <div class="project-search-overlay"></div>
+    <div class="project-search-modal">
+      <div class="project-search-input-container">
+        <svg class="project-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          <line x1="10.5" y1="10.5" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <input type="text" id="project-search-input" class="project-search-input" placeholder="Search in project..." autocomplete="off" />
+        <span class="project-search-hint">Ctrl+Shift+F</span>
+      </div>
+      <div class="project-search-status" id="project-search-status">Enter search term</div>
+      <div class="project-search-results" id="project-search-results">
+        <div class="project-search-empty">No results</div>
+      </div>
+      <div class="project-search-footer">
+        <span>↑↓ navigate</span>
+        <span>Enter jump to</span>
+        <span>Esc close</span>
+      </div>
+    </div>
   </div>
 
   <!-- AI Panel (unified for chat and edit) -->

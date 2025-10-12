@@ -131,6 +131,29 @@ class LSPManager {
     
     return completions;
   }
+
+  /**
+   * Request definition location for a symbol
+   */
+  async requestDefinition(filePath, line, character, content) {
+    const languageId = this.getLanguageIdFromFile(filePath);
+    if (!languageId) {
+      throw new Error(`Unsupported file type: ${filePath}`);
+    }
+
+    const client = await this.getClient(languageId);
+    
+    // Make sure document is synced
+    client.didOpen(filePath, languageId, content);
+    
+    // Small delay to let server process
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Request definition
+    const definition = await client.definition(filePath, line, character);
+    
+    return definition;
+  }
 }
 
 module.exports = { LSPManager };

@@ -129,6 +129,14 @@ class BackendProvider {
         this.handleLSPCompletion(message);
         break;
 
+      case 'lsp_definition_result':
+        this.handleLSPDefinition(message);
+        break;
+
+      case 'project_search_result':
+        this.handleProjectSearchResult(message);
+        break;
+
       // AI Messages
       case 'ai_model_loading':
         this.handleAIModelLoading(message);
@@ -272,6 +280,48 @@ class BackendProvider {
   }
 
   /**
+   * Handle lsp_definition_result response
+   */
+  handleLSPDefinition(message) {
+    const { success, filePath, definition, error } = message;
+    
+    // Find the pending request (we use timestamp in key, so need to find by prefix)
+    for (const [key, pending] of this.pendingRequests.entries()) {
+      if (key.startsWith(`lsp_definition_${filePath}`)) {
+        this.pendingRequests.delete(key);
+        
+        if (success) {
+          pending.resolve(definition);
+        } else {
+          pending.reject(new Error(error || 'Failed to get LSP definition'));
+        }
+        break;
+      }
+    }
+  }
+
+  /**
+   * Handle project_search_result response
+   */
+  handleProjectSearchResult(message) {
+    const { success, query, results, totalCount, limited, error } = message;
+    
+    // Find the pending request (we use timestamp in key, so need to find by prefix)
+    for (const [key, pending] of this.pendingRequests.entries()) {
+      if (key.startsWith('project_search_')) {
+        this.pendingRequests.delete(key);
+        
+        if (success) {
+          pending.resolve({ results, totalCount, limited });
+        } else {
+          pending.reject(new Error(error || 'Failed to search project'));
+        }
+        break;
+      }
+    }
+  }
+
+  /**
    * Send message to worker
    * @param {Object} message - Message object to send
    */
@@ -381,6 +431,59 @@ class BackendProvider {
           reject(new Error('LSP completion timeout'));
         }
       }, 10000);
+    });
+  }
+
+  /**
+   * Request LSP definition location
+   * @param {string} filePath - Path to file
+   * @param {number} line - Line number (0-based)
+   * @param {number} character - Character position (0-based)
+   * @param {string} content - Current file content
+   * @returns {Promise<Object|Array|null>} Definition location(s)
+   */
+  async requestDefinition(filePath, line, character, content) {
+    return new Promise((resolve, reject) => {
+      const key = `lsp_definition_${filePath}_${Date.now()}`;
+      this.pendingRequests.set(key, { resolve, reject });
+
+      this.sendMessage({
+        type: 'lsp_definition',
+        filePath,
+        line,
+        character,
+        content
+      });
+
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (this.pendingRequests.has(key)) {
+          this.pendingRequests.delete(key);
+          reject(new Error('LSP definition timeout'));
+        }
+      }, 10000);
+    });
+  }
+
+  // Project Search
+  async requestProjectSearch(query, searchPath) {
+    return new Promise((resolve, reject) => {
+      const key = `project_search_${Date.now()}`;
+      this.pendingRequests.set(key, { resolve, reject });
+
+      this.sendMessage({
+        type: 'project_search',
+        query,
+        searchPath
+      });
+
+      // Timeout after 30 seconds (search can be slow)
+      setTimeout(() => {
+        if (this.pendingRequests.has(key)) {
+          this.pendingRequests.delete(key);
+          reject(new Error('Project search timeout'));
+        }
+      }, 30000);
     });
   }
 
