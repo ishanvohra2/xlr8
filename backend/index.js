@@ -1,20 +1,28 @@
 /** @typedef {import('pear-interface')} */ /* global Pear */
 const fs = require("bare-fs").promises; // Use promises API
 const { WorkerManager } = require("./WorkerManager");
+const { LSPManager } = require("./LSPManager");
 
 const MessageTypes = Object.freeze({
     EXIT: "exit",
     SAVE_FILE: "save_file",
     LOAD_FILE: "load_file",
+
+    LSP_START: "lsp_start",
+    LSP_STOP: "lsp_stop",
+    LSP_COMPLETION: "lsp_completion",
+    LSP_DIAGNOSTICS: "lsp_diagnostics"
   });
 
 const workerManager = new WorkerManager();
+const lspManager = new LSPManager();
 
 // Initialize message buffer for length-prefixed protocol
 let messageBuffer = '';
 
 async function cleanup() {
     console.log("[Worker] Cleanup started");
+    lspManager.stopAll();
     console.log("[Worker] Cleanup complete");
 }
   
@@ -193,6 +201,18 @@ function validateMessageTypeSpecificFields(message) {
                 throw new Error("filePath is required for LOAD_FILE message");
             }
             break;
+
+        case MessageTypes.LSP_COMPLETION:
+            if (!message.filePath) {
+                throw new Error("filePath is required for LSP_COMPLETION message");
+            }
+            if (message.line === undefined || message.character === undefined) {
+                throw new Error("line and character are required for LSP_COMPLETION message");
+            }
+            if (!message.content) {
+                throw new Error("content is required for LSP_COMPLETION message");
+            }
+            break;
             
         default: break;
     }
@@ -266,11 +286,43 @@ async function handleLoadFile(message) {
     }
 }
 
+async function handleLSPCompletion(message) {
+    const { filePath, line, character, content } = message;
+    
+    try {
+        console.log('[Worker] LSP completion request:', filePath, 'at', line, ':', character);
+        
+        // Request completions from LSP manager
+        const completions = await lspManager.requestCompletion(filePath, line, character, content);
+        
+        // Send completions back to UI
+        workerManager.sendMessage({
+            type: 'lsp_completion_result',
+            success: true,
+            filePath: filePath,
+            completions: completions
+        });
+        
+        console.log('[Worker] LSP completions sent:', completions.length, 'items');
+    } catch (error) {
+        console.error('[Worker] Error getting LSP completions:', error);
+        
+        // Send error response back to UI
+        workerManager.sendMessage({
+            type: 'lsp_completion_result',
+            success: false,
+            filePath: filePath,
+            error: error.message
+        });
+    }
+}
+
 // Message handlers map
 const messageHandlers = {
     [MessageTypes.EXIT]: handleExit,
     [MessageTypes.SAVE_FILE]: handleSaveFile,
     [MessageTypes.LOAD_FILE]: handleLoadFile,
+    [MessageTypes.LSP_COMPLETION]: handleLSPCompletion,
 };
   
   /**

@@ -209,6 +209,8 @@ pear-ctrl[data-platform=darwin] {
   border: 1px solid var(--border-color);
   border-radius: 4px;
   max-height: 200px;
+  min-width: 200px;
+  max-width: 400px;
   overflow-y: auto;
   z-index: 1000;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);

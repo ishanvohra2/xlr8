@@ -52,7 +52,9 @@ class XLR8Editor {
 
     // Autocomplete state
     this.completionItems = [];
+    this.allCompletionItems = []; // Store unfiltered completions
     this.selectedCompletion = -1;
+    this.completionTriggerPos = -1; // Position where completion was triggered
 
     // Initialize
     this.init();
@@ -82,11 +84,41 @@ class XLR8Editor {
     document.addEventListener('keydown', (e) => this.handleKeyDown(e));
     
     // Editor content changes - with syntax highlighting
-    this.editor.addEventListener('input', () => {
+    this.editor.addEventListener('input', (e) => {
       this.isDirty = true;
       this.updateSyntaxHighlighting();
       this.updateLineNumbers();
       this.updateStatusBar();
+      
+      // If completions are visible, filter them as user types
+      if (this.autocompletePopup.style.display === 'block' && this.mode === 'insert') {
+        const cursorPos = this.editor.selectionStart;
+        
+        // If cursor moved before trigger position, hide completions
+        if (cursorPos < this.completionTriggerPos) {
+          this.hideAutocomplete();
+          return;
+        }
+        
+        // Get the text typed after the trigger
+        const typedText = this.editor.value.substring(this.completionTriggerPos, cursorPos);
+        
+        // Filter completions based on typed text
+        this.filterAndShowCompletions(typedText);
+        return;
+      }
+      
+      // Trigger completions on '.' in insert mode
+      if (this.mode === 'insert' && e.inputType === 'insertText') {
+        const text = this.editor.value;
+        const cursorPos = this.editor.selectionStart;
+        const charBefore = text[cursorPos - 1];
+        
+        if (charBefore === '.') {
+          // Small delay to let the UI update
+          setTimeout(() => this.requestCompletion(), 50);
+        }
+      }
     });
 
     // Sync scrolling between textarea and highlighting
@@ -207,6 +239,15 @@ class XLR8Editor {
     // Global keyboard shortcuts (work in any mode)
     // Note: File picker (Cmd+O) disabled - use :e <path> instead
     // Pear runtime doesn't support native file dialogs
+
+    // Trigger completion (Ctrl+Space) in insert mode
+    if (e.ctrlKey && e.key === ' ') {
+      e.preventDefault();
+      if (this.mode === 'insert') {
+        this.requestCompletion();
+      }
+      return;
+    }
 
     // Save shortcut (Cmd+S / Ctrl+S)
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -531,15 +572,36 @@ class XLR8Editor {
       return;
     }
 
+    // Store all completions and trigger position
+    this.allCompletionItems = items;
     this.completionItems = items;
     this.selectedCompletion = 0;
+    this.completionTriggerPos = this.editor.selectionStart;
     
     // Get cursor position
     const cursorPos = this.getCursorCoordinates();
     
+    // Calculate better position - below the current line
+    // Get line height from computed style
+    const lineHeight = parseFloat(window.getComputedStyle(this.editor).lineHeight) || 22;
+    
+    // Position popup below the current line with some padding
+    const popupLeft = cursorPos.left;
+    const popupTop = cursorPos.top + lineHeight + 4; // 4px padding
+    
+    // Check if popup would go off-screen bottom
+    const viewportHeight = window.innerHeight;
+    const popupHeight = 200; // max-height from CSS
+    
+    let finalTop = popupTop;
+    if (popupTop + popupHeight > viewportHeight - 50) {
+      // Position above the line instead
+      finalTop = cursorPos.top - popupHeight - 4;
+    }
+    
     // Position popup
-    this.autocompletePopup.style.left = cursorPos.left + 'px';
-    this.autocompletePopup.style.top = (cursorPos.top + 20) + 'px';
+    this.autocompletePopup.style.left = popupLeft + 'px';
+    this.autocompletePopup.style.top = finalTop + 'px';
     
     // Populate list
     this.autocompleteList.innerHTML = '';
@@ -566,7 +628,46 @@ class XLR8Editor {
   hideAutocomplete() {
     this.autocompletePopup.style.display = 'none';
     this.completionItems = [];
+    this.allCompletionItems = [];
     this.selectedCompletion = -1;
+    this.completionTriggerPos = -1;
+  }
+
+  filterAndShowCompletions(prefix) {
+    // Filter completions based on prefix
+    const filtered = this.allCompletionItems.filter(item => {
+      const label = item.label || item.insertText || item;
+      const labelStr = typeof label === 'string' ? label : String(label);
+      return labelStr.toLowerCase().startsWith(prefix.toLowerCase());
+    });
+
+    if (filtered.length === 0) {
+      this.hideAutocomplete();
+      return;
+    }
+
+    // Update displayed completions
+    this.completionItems = filtered;
+    this.selectedCompletion = 0;
+    
+    // Re-render the list
+    this.autocompleteList.innerHTML = '';
+    filtered.forEach((item, index) => {
+      const li = document.createElement('li');
+      li.textContent = item.label || item;
+      if (item.kind) {
+        const kindSpan = document.createElement('span');
+        kindSpan.className = 'completion-kind';
+        kindSpan.textContent = this.getCompletionKindText(item.kind);
+        li.appendChild(kindSpan);
+      }
+      if (index === 0) li.classList.add('selected');
+      li.addEventListener('click', () => {
+        this.selectedCompletion = index;
+        this.acceptCompletion();
+      });
+      this.autocompleteList.appendChild(li);
+    });
   }
 
   selectNextCompletion() {
@@ -597,54 +698,51 @@ class XLR8Editor {
     const completion = this.completionItems[this.selectedCompletion];
     const insertText = completion.insertText || completion.label || completion;
     
-    // Insert the completion text
-    const start = this.editor.selectionStart;
-    const end = this.editor.selectionEnd;
+    // Get current state
+    const cursorPos = this.editor.selectionStart;
     const text = this.editor.value;
     
-    // Find the start of the current word
-    let wordStart = start;
-    while (wordStart > 0 && /\w/.test(text[wordStart - 1])) {
-      wordStart--;
-    }
+    // Replace from trigger position to current cursor
+    // This removes any partially typed text
+    const before = text.substring(0, this.completionTriggerPos);
+    const after = text.substring(cursorPos);
     
-    this.editor.value = text.substring(0, wordStart) + insertText + text.substring(end);
-    this.editor.selectionStart = this.editor.selectionEnd = wordStart + insertText.length;
+    this.editor.value = before + insertText + after;
+    this.editor.selectionStart = this.editor.selectionEnd = this.completionTriggerPos + insertText.length;
     
     this.hideAutocomplete();
     this.editor.dispatchEvent(new Event('input'));
   }
 
   getCursorCoordinates() {
-    // Create a temporary div to measure cursor position
-    const div = document.createElement('div');
+    // Get the editor's bounding rectangle
+    const editorRect = this.editor.getBoundingClientRect();
+    
+    // Get cursor position in the textarea
+    const cursorPos = this.editor.selectionStart;
+    const text = this.editor.value;
+    const textBeforeCursor = text.substring(0, cursorPos);
+    
+    // Calculate line and column
+    const lines = textBeforeCursor.split('\n');
+    const currentLine = lines.length - 1;
+    const currentCol = lines[lines.length - 1].length;
+    
+    // Get computed styles
     const style = window.getComputedStyle(this.editor);
+    const lineHeight = parseFloat(style.lineHeight) || 22;
+    const fontSize = parseFloat(style.fontSize) || 14;
+    const paddingLeft = parseFloat(style.paddingLeft) || 16;
+    const paddingTop = parseFloat(style.paddingTop) || 12;
     
-    div.style.position = 'absolute';
-    div.style.visibility = 'hidden';
-    div.style.font = style.font;
-    div.style.padding = style.padding;
-    div.style.border = style.border;
-    div.style.whiteSpace = style.whiteSpace;
-    div.style.wordWrap = style.wordWrap;
-    div.style.width = style.width;
+    // Approximate character width (monospace)
+    const charWidth = fontSize * 0.6;
     
-    const text = this.editor.value.substring(0, this.editor.selectionStart);
-    div.textContent = text;
+    // Calculate position relative to viewport
+    const left = editorRect.left + paddingLeft + (currentCol * charWidth) - this.editor.scrollLeft;
+    const top = editorRect.top + paddingTop + (currentLine * lineHeight) - this.editor.scrollTop;
     
-    const span = document.createElement('span');
-    span.textContent = '|';
-    div.appendChild(span);
-    
-    document.body.appendChild(div);
-    
-    const coordinates = {
-      left: span.offsetLeft + this.editor.offsetLeft,
-      top: span.offsetTop + this.editor.offsetTop
-    };
-    
-    document.body.removeChild(div);
-    return coordinates;
+    return { left, top };
   }
 
   getCompletionKindText(kind) {
@@ -658,16 +756,47 @@ class XLR8Editor {
     return kinds[kind] || '';
   }
 
-  // Basic keyword-based completion (LSP removed)
+  // LSP-powered completion with keyword fallback
   async requestCompletion() {
-    const currentWord = this.getCurrentWord();
-    if (currentWord.length < 2) {
+    // Only request completions if we have a file open
+    if (!this.currentFile) {
       this.hideAutocomplete();
       return;
     }
-    
-    // Show keyword completions
-    this.showKeywordCompletions(currentWord);
+
+    try {
+      // Get cursor position
+      const text = this.editor.value;
+      const cursorPos = this.editor.selectionStart;
+      
+      // Calculate line and character position
+      const textUpToCursor = text.substring(0, cursorPos);
+      const lines = textUpToCursor.split('\n');
+      const line = lines.length - 1;
+      const character = lines[lines.length - 1].length;
+
+      // Request completions from LSP via backend
+      const completions = await backendProvider.requestCompletion(
+        this.currentFile,
+        line,
+        character,
+        this.editor.value
+      );
+
+      if (completions && completions.length > 0) {
+        this.showAutocomplete(completions);
+      } else {
+        this.hideAutocomplete();
+      }
+    } catch (error) {
+      // LSP failed, fallback to keyword completions
+      const currentWord = this.getCurrentWord();
+      if (currentWord.length >= 2) {
+        this.showKeywordCompletions(currentWord);
+      } else {
+        this.hideAutocomplete();
+      }
+    }
   }
 
   showKeywordCompletions(currentWord) {

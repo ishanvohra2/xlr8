@@ -119,6 +119,10 @@ class BackendProvider {
         this.handleFileSaved(message);
         break;
 
+      case 'lsp_completion_result':
+        this.handleLSPCompletion(message);
+        break;
+
       case 'error':
         console.error('[BackendProvider] Error from worker:', message.error);
         if (this.onError) {
@@ -182,6 +186,25 @@ class BackendProvider {
     // Also trigger callback if set
     if (this.onFileSaved) {
       this.onFileSaved({ success, filePath, error });
+    }
+  }
+
+  /**
+   * Handle lsp_completion_result response
+   */
+  handleLSPCompletion(message) {
+    const { success, filePath, completions, error } = message;
+    const key = `lsp_completion_${filePath}`;
+    const pending = this.pendingRequests.get(key);
+
+    if (pending) {
+      this.pendingRequests.delete(key);
+      
+      if (success) {
+        pending.resolve(completions || []);
+      } else {
+        pending.reject(new Error(error || 'Failed to get LSP completions'));
+      }
     }
   }
 
@@ -260,6 +283,41 @@ class BackendProvider {
           reject(new Error('Save file timeout'));
         }
       }, 30000);
+    });
+  }
+
+  // ============================================================================
+  // LSP Operations
+  // ============================================================================
+
+  /**
+   * Request LSP completions
+   * @param {string} filePath - Path to file
+   * @param {number} line - Line number (0-based)
+   * @param {number} character - Character position (0-based)
+   * @param {string} content - Current file content
+   * @returns {Promise<Array>} Array of completion items
+   */
+  async requestCompletion(filePath, line, character, content) {
+    return new Promise((resolve, reject) => {
+      const key = `lsp_completion_${filePath}`;
+      this.pendingRequests.set(key, { resolve, reject });
+
+      this.sendMessage({
+        type: 'lsp_completion',
+        filePath,
+        line,
+        character,
+        content
+      });
+
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (this.pendingRequests.has(key)) {
+          this.pendingRequests.delete(key);
+          reject(new Error('LSP completion timeout'));
+        }
+      }, 10000);
     });
   }
 
