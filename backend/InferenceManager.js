@@ -37,7 +37,11 @@ When editing code:
 - Ensure changes are syntactically correct
 - Be surgical - change only what's necessary
 
-Respond with ONLY the modified code section. Do not include explanations unless there are important caveats.
+IMPORTANT: Respond with ONLY the modified code. Do NOT include:
+- Line numbers (the context shows line numbers for reference, but your output should not have them)
+- Explanations (unless there are critical caveats)
+- Extra formatting or markdown (plain code only, or wrap in a single code block)
+
 The user will see a diff, so be precise with your edits.`
         };
     }
@@ -73,9 +77,10 @@ The user will see a diff, so be precise with your edits.`
     /**
      * Build context string from file and conversation
      * @param {Object} context - Context object
+     * @param {boolean} includeLineNumbers - Whether to include line numbers (default: true)
      * @returns {string} Formatted context string
      */
-    buildContextString(context) {
+    buildContextString(context, includeLineNumbers = true) {
         const parts = [];
         
         if (context.filePath) {
@@ -87,16 +92,26 @@ The user will see a diff, so be precise with your edits.`
         }
         
         if (context.content) {
-            const lines = context.content.split('\n');
-            const lineNumbers = lines.map((line, idx) => `${idx + 1}: ${line}`).join('\n');
-            parts.push(`\nCode:\n\`\`\`${context.language || ''}\n${lineNumbers}\n\`\`\``);
+            if (includeLineNumbers) {
+                // Include line numbers for reference (useful in chat mode)
+                const lines = context.content.split('\n');
+                const lineNumbers = lines.map((line, idx) => `${idx + 1}: ${line}`).join('\n');
+                parts.push(`\nCode:\n\`\`\`${context.language || ''}\n${lineNumbers}\n\`\`\``);
+            } else {
+                // Just raw code without line numbers (for edit mode)
+                parts.push(`\nCode:\n\`\`\`${context.language || ''}\n${context.content}\n\`\`\``);
+            }
         }
         
         if (context.selection && context.selection.text) {
-            parts.push(`\nSelected code (lines ${context.selection.start.line + 1}-${context.selection.end.line + 1}):\n\`\`\`${context.language || ''}\n${context.selection.text}\n\`\`\``);
+            if (includeLineNumbers) {
+                parts.push(`\nSelected code (lines ${context.selection.start.line + 1}-${context.selection.end.line + 1}):\n\`\`\`${context.language || ''}\n${context.selection.text}\n\`\`\``);
+            } else {
+                parts.push(`\nSelected code:\n\`\`\`${context.language || ''}\n${context.selection.text}\n\`\`\``);
+            }
         }
         
-        if (context.cursorPosition) {
+        if (context.cursorPosition && includeLineNumbers) {
             parts.push(`\nCursor at line ${context.cursorPosition.line + 1}, character ${context.cursorPosition.character + 1}`);
         }
         
@@ -204,7 +219,8 @@ The user will see a diff, so be precise with your edits.`
         }
         
         const systemPrompt = this.systemPrompts.edit;
-        const contextString = this.buildContextString(context);
+        // Don't include line numbers in edit mode - prevents LLM from copying them
+        const contextString = this.buildContextString(context, false);
         
         // Build edit prompt
         const editPrompt = `${contextString}\n\nInstruction: ${instruction}\n\nProvide the modified code:`;

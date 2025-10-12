@@ -31,77 +31,142 @@
     <ul id="autocomplete-list"></ul>
   </div>
 
-  <!-- AI Chat Panel -->
-  <div id="ai-chat-panel" class="ai-panel" style="display: none;">
+  <!-- AI Panel (unified for chat and edit) -->
+  <div id="ai-panel" class="ai-panel" style="display: none;">
     <div class="ai-panel-header">
-      <h3>AI Chat</h3>
+      <div class="ai-header-left">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="ai-icon">
+          <path d="M8 2L3 6L8 10L13 6L8 2Z" fill="currentColor" opacity="0.6"/>
+          <path d="M8 6L3 10L8 14L13 10L8 6Z" fill="currentColor"/>
+        </svg>
+        <span id="ai-panel-title-text" class="ai-panel-title">AI Assistant</span>
+      </div>
       <div class="ai-panel-controls">
-        <button id="ai-new-chat-btn" class="ai-btn" title="New Chat">+</button>
-        <button id="ai-close-chat-btn" class="ai-btn" title="Close">×</button>
+        <button id="ai-mode-toggle-btn" class="ai-icon-btn" title="Switch Mode" style="display: none;">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 7H12M7 2V12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button id="ai-new-chat-btn" class="ai-icon-btn" title="New Chat" style="display: none;">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1V13M1 7H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button id="ai-close-panel-btn" class="ai-icon-btn" title="Close">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
     </div>
     
+    <!-- Chat List View -->
     <div id="ai-chat-list" class="ai-chat-list" style="display: none;">
-      <h4>Recent Chats</h4>
+      <div class="ai-chat-list-header">Recent Conversations</div>
       <div id="ai-chats-container"></div>
-      <button id="ai-start-chat-btn" class="ai-btn-primary">Start New Chat</button>
+      <button id="ai-start-chat-btn" class="ai-new-chat-btn">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M7 1V13M1 7H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        New Chat
+      </button>
     </div>
     
-    <div id="ai-chat-active" class="ai-chat-active" style="display: none;">
-      <div id="ai-messages-container" class="ai-messages"></div>
-      <div class="ai-input-container">
-        <textarea id="ai-chat-input" class="ai-chat-input" placeholder="Ask about your code..." rows="3"></textarea>
-        <button id="ai-send-btn" class="ai-btn-primary">Send</button>
-      </div>
-    </div>
-
-    <div id="ai-loading-indicator" class="ai-loading" style="display: none;">
-      <div class="ai-spinner"></div>
-      <p>AI is thinking...</p>
-    </div>
-  </div>
-
-  <!-- AI Edit Diff Viewer -->
-  <div id="ai-edit-modal" class="ai-modal" style="display: none;">
-    <div class="ai-modal-content">
-      <div class="ai-modal-header">
-        <h3>AI Code Edit</h3>
-        <button id="ai-close-edit-btn" class="ai-btn">×</button>
+    <!-- Chat View -->
+    <div id="ai-chat-view" class="ai-view-container" style="display: none;">
+      <!-- Scrollable content area -->
+      <div class="ai-content-scroll">
+        <div id="ai-messages-container" class="ai-messages"></div>
       </div>
       
-      <div id="ai-edit-input-section">
-        <textarea id="ai-edit-instruction" class="ai-edit-input" placeholder="Describe the changes you want..." rows="3"></textarea>
-        <button id="ai-generate-edit-btn" class="ai-btn-primary">Generate Edit</button>
+      <!-- Fixed input at bottom -->
+      <div class="ai-input-container">
+        <div class="ai-input-wrapper">
+          <textarea id="ai-chat-input" class="ai-input-field" placeholder="Ask about your code..." rows="1"></textarea>
+          <button id="ai-send-btn" class="ai-send-btn" title="Send (Ctrl+Enter)">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M2 8L14 2L8 14L7 9L2 8Z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+        <div class="ai-input-hint">Press Ctrl+Enter to send</div>
+      </div>
+    </div>
+
+    <!-- Edit View -->
+    <div id="ai-edit-view" class="ai-view-container" style="display: none;">
+      <!-- Scrollable content area -->
+      <div class="ai-content-scroll">
+        <!-- Edit Streaming Preview -->
+        <div id="ai-edit-preview-section" class="ai-edit-preview-section" style="display: none;">
+          <div class="ai-preview-header">
+            <span class="ai-preview-title">Generating...</span>
+          </div>
+          <div class="ai-preview-container">
+            <pre id="ai-edit-preview" class="ai-preview-content"></pre>
+          </div>
+        </div>
+
+        <!-- Edit Result -->
+        <div id="ai-edit-result-section" class="ai-edit-result-section" style="display: none;">
+          <div class="ai-diff-header">
+            <span class="ai-diff-title">Proposed Changes</span>
+          </div>
+          <div class="ai-diff-container">
+            <pre id="ai-diff-display" class="ai-diff-view"></pre>
+          </div>
+          <div class="ai-edit-actions">
+            <button id="ai-reject-edit-btn" class="ai-action-btn ai-action-secondary">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              Reject
+            </button>
+            <button id="ai-accept-edit-btn" class="ai-action-btn ai-action-primary">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2 7L6 11L12 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Accept
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div id="ai-edit-result-section" style="display: none;">
-        <div class="ai-diff-container">
-          <h4>Proposed Changes:</h4>
-          <pre id="ai-diff-display" class="ai-diff-view"></pre>
+      <!-- Fixed input at bottom -->
+      <div class="ai-input-container">
+        <div class="ai-input-wrapper">
+          <textarea id="ai-edit-instruction" class="ai-input-field" placeholder="Describe the changes you want to make..." rows="1"></textarea>
+          <button id="ai-generate-edit-btn" class="ai-send-btn" title="Generate (Ctrl+Enter)">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M2 8L14 2L8 14L7 9L2 8Z" fill="currentColor"/>
+            </svg>
+          </button>
         </div>
-        <div class="ai-edit-actions">
-          <button id="ai-accept-edit-btn" class="ai-btn-success">Accept</button>
-          <button id="ai-reject-edit-btn" class="ai-btn-danger">Reject</button>
-        </div>
+        <div class="ai-input-hint">Press Ctrl+Enter to generate</div>
       </div>
+    </div>
 
-      <div id="ai-edit-loading" class="ai-loading" style="display: none;">
-        <div class="ai-spinner"></div>
-        <p>Generating edit...</p>
-      </div>
+    <!-- General Loading Indicator -->
+    <div id="ai-loading-indicator" class="ai-loading" style="display: none;">
+      <div class="ai-spinner"></div>
     </div>
   </div>
 
   <!-- AI Toolbar (trigger buttons) -->
   <div id="ai-toolbar">
-    <button id="ai-ask-btn" class="ai-toolbar-btn" title="Ask AI (Ctrl+Shift+A)">
-      <span>💬</span>
+    <button id="ai-ask-btn" class="ai-toolbar-btn" title="Chat with AI (Ctrl+Shift+A)">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M10 3L5 7L10 11L15 7L10 3Z" fill="currentColor" opacity="0.5"/>
+        <path d="M10 7L5 11L10 15L15 11L10 7Z" fill="currentColor"/>
+      </svg>
     </button>
     <button id="ai-edit-btn" class="ai-toolbar-btn" title="Edit with AI (Ctrl+Shift+E)">
-      <span>✏️</span>
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M4 10H16M10 4V16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
     </button>
     <div id="ai-model-status" class="ai-model-status" title="AI Model Status">
-      <span class="ai-status-indicator">●</span>
+      <div class="ai-status-indicator"></div>
     </div>
   </div>
 </body>

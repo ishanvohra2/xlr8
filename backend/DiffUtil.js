@@ -171,7 +171,7 @@ class DiffUtil {
         let match = response.match(codeBlockRegex);
         
         if (match) {
-            return match[1].trim();
+            return this.stripLineNumbers(match[1].trim());
         }
         
         // Try any code block
@@ -179,11 +179,29 @@ class DiffUtil {
         match = response.match(anyCodeBlockRegex);
         
         if (match) {
-            return match[1].trim();
+            return this.stripLineNumbers(match[1].trim());
         }
         
-        // If no code block, return as is (but trim)
-        return response.trim();
+        // If no code block, return as is (but trim and strip line numbers)
+        return this.stripLineNumbers(response.trim());
+    }
+
+    /**
+     * Strip line numbers from code (handles formats like "1: code" or "1| code")
+     * @param {string} code - Code potentially with line numbers
+     * @returns {string} Code without line numbers
+     */
+    static stripLineNumbers(code) {
+        const lines = code.split('\n');
+        const cleanedLines = lines.map(line => {
+            // Match line numbers at the start: "1: " or "1| " or "1 " etc.
+            const match = line.match(/^\s*\d+[:|\s]\s*(.*)/);
+            if (match) {
+                return match[1];
+            }
+            return line;
+        });
+        return cleanedLines.join('\n');
     }
 
     /**

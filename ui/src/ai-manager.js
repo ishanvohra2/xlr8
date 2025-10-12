@@ -3,6 +3,7 @@
  */
 
 import { backendProvider } from './providers/backend-provider.js';
+import { marked } from 'marked';
 
 export class AIManager {
   constructor(editor) {
@@ -11,22 +12,30 @@ export class AIManager {
     this.currentEditResult = null;
     this.editHistory = []; // For undo/redo
     this.editHistoryIndex = -1;
+    this.currentMode = null; // 'chat' or 'edit'
     
-    // DOM elements
-    this.chatPanel = document.getElementById('ai-chat-panel');
+    // DOM elements - unified panel
+    this.panel = document.getElementById('ai-panel');
+    this.panelTitleText = document.getElementById('ai-panel-title-text');
+    this.closePanelBtn = document.getElementById('ai-close-panel-btn');
+    this.newChatBtn = document.getElementById('ai-new-chat-btn');
+    this.toolbar = document.getElementById('ai-toolbar');
+    
+    // Chat elements
     this.chatList = document.getElementById('ai-chat-list');
-    this.chatActive = document.getElementById('ai-chat-active');
+    this.chatView = document.getElementById('ai-chat-view');
     this.messagesContainer = document.getElementById('ai-messages-container');
     this.chatInput = document.getElementById('ai-chat-input');
     this.sendBtn = document.getElementById('ai-send-btn');
     this.loadingIndicator = document.getElementById('ai-loading-indicator');
     
-    this.editModal = document.getElementById('ai-edit-modal');
+    // Edit elements
+    this.editView = document.getElementById('ai-edit-view');
     this.editInstruction = document.getElementById('ai-edit-instruction');
     this.generateEditBtn = document.getElementById('ai-generate-edit-btn');
-    this.editInputSection = document.getElementById('ai-edit-input-section');
+    this.editPreviewSection = document.getElementById('ai-edit-preview-section');
+    this.editPreview = document.getElementById('ai-edit-preview');
     this.editResultSection = document.getElementById('ai-edit-result-section');
-    this.editLoading = document.getElementById('ai-edit-loading');
     this.diffDisplay = document.getElementById('ai-diff-display');
     this.acceptEditBtn = document.getElementById('ai-accept-edit-btn');
     this.rejectEditBtn = document.getElementById('ai-reject-edit-btn');
@@ -41,13 +50,25 @@ export class AIManager {
     this.setupEventListeners();
     this.setupBackendCallbacks();
     this.updateModelStatus('loading');
+    this.configureMarkdown();
+  }
+
+  configureMarkdown() {
+    // Configure marked for better code highlighting and rendering
+    marked.setOptions({
+      breaks: true, // Convert \n to <br>
+      gfm: true, // GitHub Flavored Markdown
+      headerIds: false,
+      mangle: false
+    });
   }
 
   setupEventListeners() {
-    // Chat panel controls
-    document.getElementById('ai-ask-btn').addEventListener('click', () => this.openChatPanel());
-    document.getElementById('ai-close-chat-btn').addEventListener('click', () => this.closeChatPanel());
-    document.getElementById('ai-new-chat-btn').addEventListener('click', () => this.showChatList());
+    // Panel controls
+    document.getElementById('ai-ask-btn').addEventListener('click', () => this.openPanel('chat'));
+    document.getElementById('ai-edit-btn').addEventListener('click', () => this.openPanel('edit'));
+    this.closePanelBtn.addEventListener('click', () => this.closePanel());
+    this.newChatBtn.addEventListener('click', () => this.showChatList());
     document.getElementById('ai-start-chat-btn').addEventListener('click', () => this.startNewChat());
     
     // Chat input
@@ -58,10 +79,9 @@ export class AIManager {
         this.sendMessage();
       }
     });
+    this.chatInput.addEventListener('input', () => this.autoResizeTextarea(this.chatInput));
     
-    // Edit modal controls
-    document.getElementById('ai-edit-btn').addEventListener('click', () => this.openEditModal());
-    document.getElementById('ai-close-edit-btn').addEventListener('click', () => this.closeEditModal());
+    // Edit controls
     this.generateEditBtn.addEventListener('click', () => this.generateEdit());
     this.acceptEditBtn.addEventListener('click', () => this.acceptEdit());
     this.rejectEditBtn.addEventListener('click', () => this.rejectEdit());
@@ -73,26 +93,24 @@ export class AIManager {
         this.generateEdit();
       }
     });
+    this.editInstruction.addEventListener('input', () => this.autoResizeTextarea(this.editInstruction));
     
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       // Ctrl+Shift+A for Ask
       if (e.ctrlKey && e.shiftKey && e.key === 'A') {
         e.preventDefault();
-        this.openChatPanel();
+        this.openPanel('chat');
       }
       // Ctrl+Shift+E for Edit
       if (e.ctrlKey && e.shiftKey && e.key === 'E') {
         e.preventDefault();
-        this.openEditModal();
+        this.openPanel('edit');
       }
-      // Escape to close modals
+      // Escape to close panel
       if (e.key === 'Escape') {
-        if (this.chatPanel.classList.contains('active')) {
-          this.closeChatPanel();
-        }
-        if (this.editModal.style.display === 'block') {
-          this.closeEditModal();
+        if (this.panel.classList.contains('active')) {
+          this.closePanel();
         }
       }
     });
@@ -134,7 +152,7 @@ export class AIManager {
     
     // Edit response tokens (streaming)
     backendProvider.onAIEditResponseToken = (token) => {
-      // Could show streaming preview here if desired
+      this.appendToEditPreview(token);
     };
     
     // Edit response end
@@ -157,27 +175,51 @@ export class AIManager {
   }
 
   // ============================================================================
-  // Chat Panel Methods
+  // Panel Management Methods
   // ============================================================================
 
-  async openChatPanel() {
+  async openPanel(mode) {
     if (!this.editor.currentFile) {
       this.editor.showMessage('Please open a file first');
       return;
     }
     
-    this.chatPanel.classList.add('active');
-    this.chatPanel.style.display = 'flex';
+    this.currentMode = mode;
+    this.panel.classList.add('active');
+    this.panel.style.display = 'flex';
     
-    // Show chat list or start new chat
-    await this.showChatList();
+    // Hide floating action buttons when panel is open
+    this.toolbar.style.display = 'none';
+    
+    // Hide all views
+    this.chatList.style.display = 'none';
+    this.chatView.style.display = 'none';
+    this.editView.style.display = 'none';
+    
+    if (mode === 'chat') {
+      this.panelTitleText.textContent = 'Chat';
+      this.newChatBtn.style.display = 'flex';
+      await this.showChatList();
+    } else if (mode === 'edit') {
+      this.panelTitleText.textContent = 'Edit with AI';
+      this.newChatBtn.style.display = 'none';
+      this.showEditView();
+    }
   }
 
-  closeChatPanel() {
-    this.chatPanel.classList.remove('active');
+  closePanel() {
+    this.panel.classList.remove('active');
+    
+    // Show floating action buttons again
+    this.toolbar.style.display = 'flex';
+    
     setTimeout(() => {
-      this.chatPanel.style.display = 'none';
-    }, 300);
+      this.panel.style.display = 'none';
+      // Reset views
+      this.chatList.style.display = 'none';
+      this.chatView.style.display = 'none';
+      this.editView.style.display = 'none';
+    }, 250);
   }
 
   async showChatList() {
@@ -192,8 +234,8 @@ export class AIManager {
         await this.startNewChat();
       } else {
         // Show list of chats
-        this.chatList.style.display = 'block';
-        this.chatActive.style.display = 'none';
+        this.chatList.style.display = 'flex';
+        this.chatView.style.display = 'none';
         
         chats.forEach(chat => {
           const chatItem = document.createElement('div');
@@ -218,7 +260,7 @@ export class AIManager {
       this.currentChatId = chatId;
       
       this.chatList.style.display = 'none';
-      this.chatActive.style.display = 'flex';
+      this.chatView.style.display = 'flex';
       this.messagesContainer.innerHTML = '';
       this.chatInput.value = '';
       this.chatInput.focus();
@@ -234,7 +276,7 @@ export class AIManager {
       this.currentChatId = chatId;
       
       this.chatList.style.display = 'none';
-      this.chatActive.style.display = 'flex';
+      this.chatView.style.display = 'flex';
       
       // Display messages
       this.messagesContainer.innerHTML = '';
@@ -289,7 +331,13 @@ export class AIManager {
     
     const contentDiv = document.createElement('div');
     contentDiv.className = 'ai-message-content';
-    contentDiv.textContent = content;
+    
+    // Render markdown for assistant messages, plain text for user messages
+    if (role === 'assistant') {
+      contentDiv.innerHTML = marked.parse(content || '');
+    } else {
+      contentDiv.textContent = content;
+    }
     
     messageDiv.appendChild(contentDiv);
     this.messagesContainer.appendChild(messageDiv);
@@ -303,7 +351,14 @@ export class AIManager {
     
     const lastMessage = messages[messages.length - 1];
     const contentDiv = lastMessage.querySelector('.ai-message-content');
-    contentDiv.textContent += token;
+    
+    // Store raw markdown in a data attribute
+    const currentMarkdown = contentDiv.dataset.markdown || '';
+    const newMarkdown = currentMarkdown + token;
+    contentDiv.dataset.markdown = newMarkdown;
+    
+    // Re-render the markdown
+    contentDiv.innerHTML = marked.parse(newMarkdown);
     
     this.scrollMessagesToBottom();
   }
@@ -313,34 +368,31 @@ export class AIManager {
   }
 
   // ============================================================================
-  // Edit Modal Methods
+  // Edit View Methods
   // ============================================================================
 
-  openEditModal() {
-    if (!this.editor.currentFile) {
-      this.editor.showMessage('Please open a file first');
-      return;
-    }
-    
-    this.editModal.style.display = 'flex';
-    this.editInputSection.style.display = 'block';
+  showEditView() {
+    this.editView.style.display = 'flex';
+    this.editPreviewSection.style.display = 'none';
     this.editResultSection.style.display = 'none';
-    this.editLoading.style.display = 'none';
     this.editInstruction.value = '';
+    this.editInstruction.disabled = false;
+    this.generateEditBtn.disabled = false;
     this.editInstruction.focus();
-  }
-
-  closeEditModal() {
-    this.editModal.style.display = 'none';
   }
 
   async generateEdit() {
     const instruction = this.editInstruction.value.trim();
     if (!instruction) return;
     
-    // Show loading
-    this.editInputSection.style.display = 'none';
-    this.editLoading.style.display = 'block';
+    // Disable input while generating
+    this.editInstruction.disabled = true;
+    this.generateEditBtn.disabled = true;
+    
+    // Show streaming preview section
+    this.editResultSection.style.display = 'none';
+    this.editPreviewSection.style.display = 'block';
+    this.editPreview.textContent = '';
     
     try {
       // Gather context
@@ -353,14 +405,18 @@ export class AIManager {
     } catch (error) {
       console.error('[AIManager] Error generating edit:', error);
       this.editor.showMessage('Failed to generate edit: ' + error.message);
-      this.editLoading.style.display = 'none';
-      this.editInputSection.style.display = 'block';
+      this.editPreviewSection.style.display = 'none';
+      this.editInstruction.disabled = false;
+      this.generateEditBtn.disabled = false;
     }
   }
 
   showEditResult(result) {
-    this.editLoading.style.display = 'none';
-    this.editResultSection.style.display = 'block';
+    // Hide preview, show result
+    this.editPreviewSection.style.display = 'none';
+    this.editResultSection.style.display = 'flex';
+    this.editInstruction.disabled = false;
+    this.generateEditBtn.disabled = false;
     
     // Format and display diff
     const diff = result.diff;
@@ -394,13 +450,18 @@ export class AIManager {
     }
   }
 
+  appendToEditPreview(token) {
+    this.editPreview.textContent += token;
+    // Auto-scroll to bottom
+    this.editPreview.scrollTop = this.editPreview.scrollHeight;
+  }
+
   acceptEdit() {
     if (!this.currentEditResult) return;
     
     const diff = this.currentEditResult.diff;
     if (!diff || !diff.hasChanges) {
       this.editor.showMessage('No changes to apply');
-      this.closeEditModal();
       return;
     }
     
@@ -426,11 +487,19 @@ export class AIManager {
     this.editor.isDirty = true;
     this.editor.updateStatusBar();
     this.editor.showMessage('Edit applied successfully');
-    this.closeEditModal();
+    
+    // Reset edit view
+    this.editResultSection.style.display = 'none';
+    this.editInstruction.value = '';
+    this.editInstruction.focus();
   }
 
   rejectEdit() {
-    this.closeEditModal();
+    // Reset edit view
+    this.editPreviewSection.style.display = 'none';
+    this.editResultSection.style.display = 'none';
+    this.editInstruction.value = '';
+    this.editInstruction.focus();
     this.editor.showMessage('Edit rejected');
   }
 
@@ -537,6 +606,11 @@ export class AIManager {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  autoResizeTextarea(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
   }
 }
 
