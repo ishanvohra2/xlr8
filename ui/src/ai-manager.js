@@ -14,6 +14,12 @@ export class AIManager {
     this.editHistoryIndex = -1;
     this.currentMode = null; // 'chat' or 'edit'
     
+    // Buffers for streaming performance
+    this.editPreviewBuffer = '';
+    this.editPreviewUpdateScheduled = false;
+    this.chatMessageBuffer = '';
+    this.chatMessageUpdateScheduled = false;
+    
     // DOM elements - unified panel
     this.panel = document.getElementById('ai-panel');
     this.panelTitleText = document.getElementById('ai-panel-title-text');
@@ -297,6 +303,10 @@ export class AIManager {
     const question = this.chatInput.value.trim();
     if (!question) return;
     
+    // Reset chat message buffer
+    this.chatMessageBuffer = '';
+    this.chatMessageUpdateScheduled = false;
+    
     // Add user message to UI
     this.addMessageToUI('user', question);
     this.chatInput.value = '';
@@ -352,15 +362,32 @@ export class AIManager {
     const lastMessage = messages[messages.length - 1];
     const contentDiv = lastMessage.querySelector('.ai-message-content');
     
-    // Store raw markdown in a data attribute
-    const currentMarkdown = contentDiv.dataset.markdown || '';
-    const newMarkdown = currentMarkdown + token;
-    contentDiv.dataset.markdown = newMarkdown;
+    // Add token to buffer
+    this.chatMessageBuffer += token;
     
-    // Re-render the markdown
-    contentDiv.innerHTML = marked.parse(newMarkdown);
-    
-    this.scrollMessagesToBottom();
+    // Schedule DOM update if not already scheduled
+    if (!this.chatMessageUpdateScheduled) {
+      this.chatMessageUpdateScheduled = true;
+      
+      // Use requestAnimationFrame for smooth, batched updates
+      requestAnimationFrame(() => {
+        // Store raw markdown in a data attribute
+        const currentMarkdown = contentDiv.dataset.markdown || '';
+        const newMarkdown = currentMarkdown + this.chatMessageBuffer;
+        contentDiv.dataset.markdown = newMarkdown;
+        
+        // Re-render the markdown
+        contentDiv.innerHTML = marked.parse(newMarkdown);
+        
+        // Clear buffer
+        this.chatMessageBuffer = '';
+        
+        // Reset flag for next batch
+        this.chatMessageUpdateScheduled = false;
+        
+        this.scrollMessagesToBottom();
+      });
+    }
   }
 
   scrollMessagesToBottom() {
@@ -379,6 +406,10 @@ export class AIManager {
     this.editInstruction.disabled = false;
     this.generateEditBtn.disabled = false;
     this.editInstruction.focus();
+    
+    // Reset buffers
+    this.editPreviewBuffer = '';
+    this.editPreviewUpdateScheduled = false;
   }
 
   async generateEdit() {
@@ -393,6 +424,10 @@ export class AIManager {
     this.editResultSection.style.display = 'none';
     this.editPreviewSection.style.display = 'block';
     this.editPreview.textContent = '';
+    
+    // Reset buffers
+    this.editPreviewBuffer = '';
+    this.editPreviewUpdateScheduled = false;
     
     try {
       // Gather context
@@ -412,6 +447,13 @@ export class AIManager {
   }
 
   showEditResult(result) {
+    // Ensure final buffer content is displayed before hiding
+    if (this.editPreviewBuffer) {
+      this.editPreview.textContent = this.editPreviewBuffer;
+      this.editPreviewBuffer = '';
+      this.editPreviewUpdateScheduled = false;
+    }
+    
     // Hide preview, show result
     this.editPreviewSection.style.display = 'none';
     this.editResultSection.style.display = 'flex';
@@ -451,9 +493,25 @@ export class AIManager {
   }
 
   appendToEditPreview(token) {
-    this.editPreview.textContent += token;
-    // Auto-scroll to bottom
-    this.editPreview.scrollTop = this.editPreview.scrollHeight;
+    // Add token to buffer
+    this.editPreviewBuffer += token;
+    
+    // Schedule DOM update if not already scheduled
+    if (!this.editPreviewUpdateScheduled) {
+      this.editPreviewUpdateScheduled = true;
+      
+      // Use requestAnimationFrame for smooth, batched updates
+      requestAnimationFrame(() => {
+        // Update the DOM with buffered content
+        this.editPreview.textContent = this.editPreviewBuffer;
+        
+        // Auto-scroll to bottom
+        this.editPreview.scrollTop = this.editPreview.scrollHeight;
+        
+        // Reset flag for next batch
+        this.editPreviewUpdateScheduled = false;
+      });
+    }
   }
 
   acceptEdit() {
