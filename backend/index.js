@@ -18,6 +18,7 @@ const MessageTypes = Object.freeze({
     LSP_DIAGNOSTICS: "lsp_diagnostics",
 
     PROJECT_SEARCH: "project_search",
+    LIST_FILES: "list_files",
 
     // AI Messages
     AI_LOAD_MODEL: "ai_load_model",
@@ -278,6 +279,12 @@ function validateMessageTypeSpecificFields(message) {
             }
             if (!message.searchPath) {
                 throw new Error("searchPath is required for PROJECT_SEARCH message");
+            }
+            break;
+
+        case MessageTypes.LIST_FILES:
+            if (!message.searchPath) {
+                throw new Error("searchPath is required for LIST_FILES message");
             }
             break;
 
@@ -560,6 +567,97 @@ async function handleProjectSearch(message) {
 }
 
 // ============================================================================
+// List Files Handler
+// ============================================================================
+
+async function handleListFiles(message) {
+    const { searchPath } = message;
+    const path = require('bare-path');
+    
+    try {
+        console.log('[Worker] List files request in:', searchPath);
+        
+        const files = [];
+        
+        // File extensions to list (text files only)
+        const listableExtensions = [
+            '.js', '.ts', '.jsx', '.tsx',
+            '.py', '.java', '.c', '.cpp', '.h', '.hpp',
+            '.go', '.rs', '.rb', '.php',
+            '.html', '.css', '.scss', '.sass',
+            '.json', '.yaml', '.yml', '.toml',
+            '.md', '.txt', '.sh', '.bash',
+        ];
+        
+        // Directories to skip
+        const skipDirs = ['node_modules', '.git', 'dist', 'build', '.next', '__pycache__', '.vscode', '.idea'];
+        
+        // Recursively list files in directory
+        async function listDirectory(dirPath, relativeTo) {
+            try {
+                const entries = await fs.readdir(dirPath, { withFileTypes: true });
+                
+                for (const entry of entries) {
+                    const fullPath = path.join(dirPath, entry.name);
+                    
+                    if (entry.isDirectory()) {
+                        // Skip certain directories
+                        if (!skipDirs.includes(entry.name) && !entry.name.startsWith('.')) {
+                            await listDirectory(fullPath, relativeTo);
+                        }
+                    } else if (entry.isFile()) {
+                        // Check if file has listable extension
+                        const ext = path.extname(entry.name);
+                        if (listableExtensions.includes(ext)) {
+                            // Make path relative to searchPath
+                            const relativePath = path.relative(relativeTo, fullPath);
+                            const dirName = path.dirname(relativePath);
+                            
+                            files.push({
+                                path: relativePath,
+                                name: entry.name,
+                                dir: dirName === '.' ? '' : dirName
+                            });
+                        }
+                    }
+                    
+                    // Limit to prevent overwhelming UI
+                    if (files.length >= 1000) {
+                        break;
+                    }
+                }
+            } catch (error) {
+                // Skip directories we can't read
+                console.log('[Worker] Skipping directory:', dirPath, error.message);
+            }
+        }
+        
+        // Start listing
+        await listDirectory(searchPath, searchPath);
+        
+        // Send results back to UI
+        workerManager.sendMessage({
+            type: 'list_files_result',
+            success: true,
+            files: files,
+            totalCount: files.length,
+            limited: files.length >= 1000
+        });
+        
+        console.log(`[Worker] List files complete: ${files.length} files found`);
+    } catch (error) {
+        console.error('[Worker] Error listing files:', error);
+        
+        // Send error response back to UI
+        workerManager.sendMessage({
+            type: 'list_files_result',
+            success: false,
+            error: error.message
+        });
+    }
+}
+
+// ============================================================================
 // AI Message Handlers
 // ============================================================================
 
@@ -829,6 +927,7 @@ const messageHandlers = {
     [MessageTypes.LSP_COMPLETION]: handleLSPCompletion,
     [MessageTypes.LSP_DEFINITION]: handleLSPDefinition,
     [MessageTypes.PROJECT_SEARCH]: handleProjectSearch,
+    [MessageTypes.LIST_FILES]: handleListFiles,
     [MessageTypes.AI_LOAD_MODEL]: handleAILoadModel,
     [MessageTypes.AI_CREATE_CHAT]: handleAICreateChat,
     [MessageTypes.AI_GET_CHATS]: handleAIGetChats,

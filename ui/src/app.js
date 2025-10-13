@@ -626,48 +626,12 @@ class XLR8Editor {
     console.log('[XLR8] loadFile called with:', filename);
     
     try {
-      // Try multiple path resolution strategies
-      let fullPath = null;
-      let fileData = null;
+      // Resolve path relative to CWD
+      const fullPath = path.resolve(filename);
+      console.log('[XLR8] Resolving to:', fullPath);
       
-      // Strategy 1: Try as absolute path or relative to CWD
-      try {
-        fullPath = path.resolve(filename);
-        console.log('[XLR8] Trying path:', fullPath);
-        const result = await backendProvider.loadFile(fullPath);
-        fileData = result.fileData;
-      } catch (error) {
-        console.log('[XLR8] First attempt failed:', error.message);
-        
-        // Strategy 2: Try relative to ui/test directory (common for demo files)
-        if (!path.isAbsolute(filename)) {
-          try {
-            // Get the current working directory from Pear
-            const cwd = typeof Pear !== 'undefined' && Pear.cwd ? Pear.cwd() : process.cwd();
-            fullPath = path.join(cwd, 'test', filename);
-            console.log('[XLR8] Trying test directory:', fullPath);
-            const result = await backendProvider.loadFile(fullPath);
-            fileData = result.fileData;
-          } catch (error2) {
-            console.log('[XLR8] Second attempt failed:', error2.message);
-            
-            // Strategy 3: Try ui/test from project root
-            try {
-              const cwd = typeof Pear !== 'undefined' && Pear.cwd ? Pear.cwd() : process.cwd();
-              fullPath = path.join(cwd, 'ui', 'test', filename);
-              console.log('[XLR8] Trying ui/test directory:', fullPath);
-              const result = await backendProvider.loadFile(fullPath);
-              fileData = result.fileData;
-            } catch (error3) {
-              console.log('[XLR8] Third attempt failed:', error3.message);
-              // Re-throw the original error
-              throw new Error(`File not found: ${filename}. Tried multiple locations.`);
-            }
-          }
-        } else {
-          throw error;
-        }
-      }
+      const result = await backendProvider.loadFile(fullPath);
+      const fileData = result.fileData;
       
       // Check if file is already open in a buffer
       const existingBufferId = this.bufferManager.findBufferByPath(fullPath);

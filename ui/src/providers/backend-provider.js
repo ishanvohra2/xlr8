@@ -137,6 +137,10 @@ class BackendProvider {
         this.handleProjectSearchResult(message);
         break;
 
+      case 'list_files_result':
+        this.handleListFilesResult(message);
+        break;
+
       // AI Messages
       case 'ai_model_loading':
         this.handleAIModelLoading(message);
@@ -322,6 +326,27 @@ class BackendProvider {
   }
 
   /**
+   * Handle list_files_result response
+   */
+  handleListFilesResult(message) {
+    const { success, files, totalCount, limited, error } = message;
+    
+    // Find the pending request (we use timestamp in key, so need to find by prefix)
+    for (const [key, pending] of this.pendingRequests.entries()) {
+      if (key.startsWith('list_files_')) {
+        this.pendingRequests.delete(key);
+        
+        if (success) {
+          pending.resolve({ files, totalCount, limited });
+        } else {
+          pending.reject(new Error(error || 'Failed to list files'));
+        }
+        break;
+      }
+    }
+  }
+
+  /**
    * Send message to worker
    * @param {Object} message - Message object to send
    */
@@ -482,6 +507,27 @@ class BackendProvider {
         if (this.pendingRequests.has(key)) {
           this.pendingRequests.delete(key);
           reject(new Error('Project search timeout'));
+        }
+      }, 30000);
+    });
+  }
+
+  // List Files
+  async requestListFiles(searchPath) {
+    return new Promise((resolve, reject) => {
+      const key = `list_files_${Date.now()}`;
+      this.pendingRequests.set(key, { resolve, reject });
+
+      this.sendMessage({
+        type: 'list_files',
+        searchPath
+      });
+
+      // Timeout after 30 seconds (listing can be slow for large directories)
+      setTimeout(() => {
+        if (this.pendingRequests.has(key)) {
+          this.pendingRequests.delete(key);
+          reject(new Error('List files timeout'));
         }
       }, 30000);
     });

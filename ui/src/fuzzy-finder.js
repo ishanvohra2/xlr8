@@ -5,6 +5,7 @@
  */
 
 import path from 'path';
+import { backendProvider } from './providers/backend-provider.js';
 
 export class FuzzyFinder {
   constructor(editor) {
@@ -75,47 +76,26 @@ export class FuzzyFinder {
   }
 
   async loadFiles() {
-    // Paths relative to where the app is running (ui directory)
-    // In a real implementation, we'd recursively scan the project and respect .gitignore
-    
-    this.files = [
-      // Test files (relative to ui/)
-      { path: 'test/test-example.js', name: 'test-example.js', dir: 'test' },
-      { path: 'test/test-example.py', name: 'test-example.py', dir: 'test' },
-      { path: 'test/test.txt', name: 'test.txt', dir: 'test' },
-      { path: 'test/demo-file1.js', name: 'demo-file1.js', dir: 'test' },
-      { path: 'test/demo-file2.py', name: 'demo-file2.py', dir: 'test' },
-      { path: 'test/demo-file3.md', name: 'demo-file3.md', dir: 'test' },
-      { path: 'test/test-completion.js', name: 'test-completion.js', dir: 'test' },
-      { path: 'test/index.test.js', name: 'index.test.js', dir: 'test' },
+    // Dynamically load files from the file system based on current working directory
+    try {
+      console.log('[FuzzyFinder] Loading files from:', this.currentWorkingDir);
       
-      // Source files (relative to ui/)
-      { path: 'src/app.js', name: 'app.js', dir: 'src' },
-      { path: 'src/ai-manager.js', name: 'ai-manager.js', dir: 'src' },
-      { path: 'src/buffer-manager.js', name: 'buffer-manager.js', dir: 'src' },
-      { path: 'src/fuzzy-finder.js', name: 'fuzzy-finder.js', dir: 'src' },
-      { path: 'src/providers/backend-provider.js', name: 'backend-provider.js', dir: 'src/providers' },
+      // Request file list from backend
+      const { files, totalCount, limited } = await backendProvider.requestListFiles(this.currentWorkingDir);
       
-      // Root files (relative to ui/)
-      { path: 'index.html', name: 'index.html', dir: '.' },
-      { path: 'style.css', name: 'style.css', dir: '.' },
-      { path: 'package.json', name: 'package.json', dir: '.' },
+      this.files = files;
       
-      // Backend files (relative to ui/, go up one level)
-      { path: '../backend/index.js', name: 'index.js', dir: '../backend' },
-      { path: '../backend/WorkerManager.js', name: 'WorkerManager.js', dir: '../backend' },
-      { path: '../backend/LSPManager.js', name: 'LSPManager.js', dir: '../backend' },
-      { path: '../backend/LSPClient.js', name: 'LSPClient.js', dir: '../backend' },
-      { path: '../backend/InferenceManager.js', name: 'InferenceManager.js', dir: '../backend' },
-      { path: '../backend/ChatHistoryManager.js', name: 'ChatHistoryManager.js', dir: '../backend' },
-      { path: '../backend/DiffUtil.js', name: 'DiffUtil.js', dir: '../backend' },
-      { path: '../backend/package.json', name: 'package.json', dir: '../backend' },
+      console.log('[FuzzyFinder] Loaded', this.files.length, 'files from file system');
+      if (limited) {
+        console.log('[FuzzyFinder] File list was limited to prevent UI overload');
+      }
+    } catch (error) {
+      console.error('[FuzzyFinder] Error loading files:', error);
       
-      // Docs (relative to ui/, go up one level)
-      { path: '../README.md', name: 'README.md', dir: '..' },
-    ];
-    
-    console.log('[FuzzyFinder] Loaded', this.files.length, 'files');
+      // Fallback to empty list if loading fails
+      this.files = [];
+      console.log('[FuzzyFinder] Using empty file list due to error');
+    }
   }
 
   handleInput() {
