@@ -15,6 +15,7 @@ export class FuzzyFinder {
     this.filteredFiles = [];
     this.selectedIndex = 0;
     this.currentWorkingDir = null;
+    this.tempCallback = null; // Temporary callback for custom file selection
     
     // DOM elements
     this.container = document.getElementById('fuzzy-finder');
@@ -73,6 +74,12 @@ export class FuzzyFinder {
     this.files = [];
     this.filteredFiles = [];
     this.selectedIndex = 0;
+    
+    // Clear temporary callback if cancelled
+    if (this.tempCallback) {
+      this.tempCallback(null); // Return null when cancelled
+      this.tempCallback = null;
+    }
   }
 
   async loadFiles() {
@@ -245,7 +252,15 @@ export class FuzzyFinder {
     // Close finder
     this.close();
     
-    // Open file in editor
+    // Check if there's a temporary callback (used for AI file attachment)
+    if (this.tempCallback) {
+      const callback = this.tempCallback;
+      this.tempCallback = null; // Clear callback
+      callback(selectedFile.path);
+      return;
+    }
+    
+    // Open file in editor (default behavior)
     try {
       await this.editor.loadFile(selectedFile.path);
     } catch (error) {

@@ -15,7 +15,7 @@
     "pear-interface": "^1.0.0"
   },
   "dependencies": {
-    "@tetherto/qvac-sdk": "0.10.1",
+    "@qvac/sdk": "^0.2.1",
     "bare-crypto": "^1.11.6",
     "bare-fs": "^4.4.10",
     "bare-path": "^3.0.0",

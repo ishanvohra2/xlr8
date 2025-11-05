@@ -893,20 +893,61 @@ async function handleAIEditRequest(message) {
             }
         });
         
-        // Extract code from response
-        const extractedCode = DiffUtil.extractCodeFromResponse(fullResponse, context.language);
+        // Extract code from response (can be single file or multi-file)
+        const extractedResult = DiffUtil.extractCodeFromResponse(fullResponse, context.language || context.files?.[0]?.language);
         
-        // Generate diff
-        const originalCode = context.selection?.text || context.content || '';
-        const diff = DiffUtil.generateDiff(originalCode, extractedCode);
+        let diffResult;
+        
+        // Check if it's a multi-file edit
+        if (extractedResult && typeof extractedResult === 'object' && extractedResult.type === 'multi-file') {
+            console.log('[Worker] Multi-file edit detected:', extractedResult.files.length, 'files');
+            
+            // Build file edits array with original content
+            const fileEdits = extractedResult.files.map(fileEdit => {
+                // Find original content from context
+                let originalContent = '';
+                if (context.files && Array.isArray(context.files)) {
+                    const contextFile = context.files.find(f => f.filePath === fileEdit.filePath);
+                    if (contextFile) {
+                        originalContent = contextFile.content || '';
+                    }
+                } else if (context.filePath === fileEdit.filePath) {
+                    // Single file context (legacy)
+                    originalContent = context.selection?.text || context.content || '';
+                }
+                
+                return {
+                    filePath: fileEdit.filePath,
+                    originalContent: originalContent,
+                    newContent: fileEdit.newContent
+                };
+            });
+            
+            // Generate multi-file diff
+            diffResult = DiffUtil.generateMultiFileDiff(fileEdits);
+            diffResult.explanation = extractedResult.explanation;
+            
+        } else {
+            // Single file edit (legacy format)
+            console.log('[Worker] Single file edit');
+            const extractedCode = typeof extractedResult === 'string' ? extractedResult : extractedResult.newContent || '';
+            const originalCode = context.selection?.text || context.content || '';
+            const diff = DiffUtil.generateDiff(originalCode, extractedCode);
+            
+            // Wrap in multi-file format for consistency
+            diffResult = {
+                type: 'single-file',
+                diff: diff,
+                extractedCode: extractedCode,
+                originalCode: originalCode
+            };
+        }
         
         // Signal end of edit
         workerManager.sendMessage({
             type: 'ai_edit_response_end',
             response: fullResponse,
-            extractedCode,
-            diff,
-            originalCode
+            result: diffResult
         });
         
         console.log('[Worker] AI edit response complete');

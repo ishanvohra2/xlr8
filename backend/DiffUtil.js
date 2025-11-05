@@ -160,12 +160,34 @@ class DiffUtil {
     }
 
     /**
-     * Extract code from LLM response (handles markdown code blocks)
+     * Extract code from LLM response (handles markdown code blocks and JSON format)
      * @param {string} response - LLM response
      * @param {string} language - Expected language
-     * @returns {string} Extracted code
+     * @returns {string|Object} Extracted code or parsed JSON structure
      */
     static extractCodeFromResponse(response, language = '') {
+        // First, try to parse as JSON (for multi-file edits)
+        try {
+            // Look for JSON object in the response
+            const jsonMatch = response.match(/\{[\s\S]*"files"[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.files && Array.isArray(parsed.files)) {
+                    // Return the structured format for multi-file edits
+                    return {
+                        type: 'multi-file',
+                        files: parsed.files.map(f => ({
+                            filePath: f.filePath,
+                            newContent: this.stripLineNumbers(f.newContent)
+                        })),
+                        explanation: parsed.explanation
+                    };
+                }
+            }
+        } catch (e) {
+            // Not JSON, continue with other extraction methods
+        }
+        
         // Try to find code block with language specifier
         const codeBlockRegex = new RegExp(`\`\`\`${language}\\s*\\n([\\s\\S]*?)\\n\`\`\``, 'i');
         let match = response.match(codeBlockRegex);
@@ -202,6 +224,30 @@ class DiffUtil {
             return line;
         });
         return cleanedLines.join('\n');
+    }
+
+    /**
+     * Generate diffs for multiple files
+     * @param {Array} fileEdits - Array of {filePath, originalContent, newContent}
+     * @returns {Object} Multi-file diff result
+     */
+    static generateMultiFileDiff(fileEdits) {
+        const fileDiffs = fileEdits.map(edit => {
+            const diff = this.generateDiff(edit.originalContent, edit.newContent);
+            return {
+                filePath: edit.filePath,
+                diff: diff,
+                hasChanges: diff.hasChanges
+            };
+        });
+        
+        const hasAnyChanges = fileDiffs.some(fd => fd.hasChanges);
+        
+        return {
+            type: 'multi-file',
+            files: fileDiffs,
+            hasChanges: hasAnyChanges
+        };
     }
 
     /**

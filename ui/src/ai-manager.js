@@ -14,6 +14,10 @@ export class AIManager {
     this.editHistoryIndex = -1;
     this.currentMode = null; // 'chat' or 'edit'
     
+    // Multi-file support - track attached files for chat and edit separately
+    this.chatAttachedFiles = []; // Array of file paths
+    this.editAttachedFiles = []; // Array of file paths
+    
     // Buffers for streaming performance
     this.editPreviewBuffer = '';
     this.editPreviewUpdateScheduled = false;
@@ -45,6 +49,11 @@ export class AIManager {
     this.diffDisplay = document.getElementById('ai-diff-display');
     this.acceptEditBtn = document.getElementById('ai-accept-edit-btn');
     this.rejectEditBtn = document.getElementById('ai-reject-edit-btn');
+    
+    // Shared file chips elements (used by both chat and edit)
+    this.filesContainer = document.getElementById('ai-files-container');
+    this.filesChips = document.getElementById('ai-files-chips');
+    this.addFileBtn = document.getElementById('ai-add-file-btn');
     
     this.modelStatus = document.getElementById('ai-model-status');
     this.statusIndicator = this.modelStatus.querySelector('.ai-status-indicator');
@@ -86,6 +95,9 @@ export class AIManager {
       }
     });
     this.chatInput.addEventListener('input', () => this.autoResizeTextarea(this.chatInput));
+    
+    // Shared file attachment button
+    this.addFileBtn.addEventListener('click', () => this.addFile());
     
     // Edit controls
     this.generateEditBtn.addEventListener('click', () => this.generateEdit());
@@ -162,9 +174,9 @@ export class AIManager {
     };
     
     // Edit response end
-    backendProvider.onAIEditResponseEnd = (result) => {
-      this.currentEditResult = result;
-      this.showEditResult(result);
+    backendProvider.onAIEditResponseEnd = (data) => {
+      this.currentEditResult = data.result;
+      this.showEditResult(data.result);
     };
   }
 
@@ -205,10 +217,20 @@ export class AIManager {
     if (mode === 'chat') {
       this.panelTitleText.textContent = 'Chat';
       this.newChatBtn.style.display = 'flex';
+      // Initialize with current file attached
+      if (this.chatAttachedFiles.length === 0 && this.editor.currentFile) {
+        this.chatAttachedFiles = [this.editor.currentFile];
+      }
+      this.updateFileChips();
       await this.showChatList();
     } else if (mode === 'edit') {
       this.panelTitleText.textContent = 'Edit with AI';
       this.newChatBtn.style.display = 'none';
+      // Initialize with current file attached
+      if (this.editAttachedFiles.length === 0 && this.editor.currentFile) {
+        this.editAttachedFiles = [this.editor.currentFile];
+      }
+      this.updateFileChips();
       this.showEditView();
     }
   }
@@ -321,7 +343,7 @@ export class AIManager {
     
     try {
       // Gather context
-      const context = this.gatherContext();
+      const context = await this.gatherContext();
       
       // Send to backend (streaming handled by callbacks)
       await backendProvider.sendChatMessage(this.currentChatId, question, context);
@@ -431,7 +453,7 @@ export class AIManager {
     
     try {
       // Gather context
-      const context = this.gatherContext();
+      const context = await this.gatherContext();
       
       // Request edit (streaming handled by callbacks)
       const result = await backendProvider.requestEdit(instruction, context);
@@ -460,8 +482,17 @@ export class AIManager {
     this.editInstruction.disabled = false;
     this.generateEditBtn.disabled = false;
     
-    // Format and display diff
-    const diff = result.diff;
+    // Check if it's a multi-file edit
+    if (result.type === 'multi-file') {
+      this.showMultiFileDiff(result);
+    } else {
+      // Single file edit (legacy)
+      this.showSingleFileDiff(result.diff);
+    }
+  }
+
+  showSingleFileDiff(diff) {
+    // Format and display single file diff
     if (diff && diff.hasChanges) {
       let diffHtml = '';
       
@@ -492,6 +523,93 @@ export class AIManager {
     }
   }
 
+  showMultiFileDiff(result) {
+    // Display multi-file diff with file tabs
+    const filesWithChanges = result.files.filter(f => f.hasChanges);
+    
+    if (filesWithChanges.length === 0) {
+      this.diffDisplay.innerHTML = '<div class="ai-no-changes">No changes detected</div>';
+      return;
+    }
+    
+    // Create tabbed interface for multiple files
+    let html = '';
+    
+    // Show explanation if present
+    if (result.explanation) {
+      html += `<div class="ai-edit-explanation">${this.escapeHtml(result.explanation)}</div>`;
+    }
+    
+    // Create file tabs
+    html += '<div class="ai-diff-tabs">';
+    filesWithChanges.forEach((file, index) => {
+      const fileName = file.filePath.split('/').pop();
+      html += `<button class="ai-diff-tab ${index === 0 ? 'active' : ''}" data-file-index="${index}">
+        <span class="ai-diff-tab-name">${this.escapeHtml(fileName)}</span>
+        <span class="ai-diff-tab-path">${this.escapeHtml(file.filePath)}</span>
+      </button>`;
+    });
+    html += '</div>';
+    
+    // Create diff displays for each file
+    html += '<div class="ai-diff-contents">';
+    filesWithChanges.forEach((file, index) => {
+      html += `<div class="ai-diff-content ${index === 0 ? 'active' : ''}" data-file-index="${index}">`;
+      html += `<div class="ai-diff-header">${this.escapeHtml(file.filePath)}</div>`;
+      html += '<pre class="ai-diff-code">';
+      
+      // Format diff for this file
+      if (file.diff && file.diff.hasChanges) {
+        for (const hunk of file.diff.hunks) {
+          for (const line of hunk.lines) {
+            let lineClass = '';
+            let prefix = ' ';
+            
+            if (line.type === 'add') {
+              lineClass = 'diff-add';
+              prefix = '+';
+            } else if (line.type === 'remove') {
+              lineClass = 'diff-remove';
+              prefix = '-';
+            }
+            
+            const lineSpan = lineClass ? 
+              `<span class="${lineClass}">${this.escapeHtml(prefix + line.content)}</span>\n` :
+              this.escapeHtml(prefix + line.content) + '\n';
+            
+            html += lineSpan;
+          }
+        }
+      } else {
+        html += 'No changes in this file';
+      }
+      
+      html += '</pre>';
+      html += '</div>';
+    });
+    html += '</div>';
+    
+    this.diffDisplay.innerHTML = html;
+    
+    // Add click handlers for tabs
+    const tabs = this.diffDisplay.querySelectorAll('.ai-diff-tab');
+    const contents = this.diffDisplay.querySelectorAll('.ai-diff-content');
+    
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const fileIndex = parseInt(tab.dataset.fileIndex);
+        
+        // Update active tab
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        // Update active content
+        contents.forEach(c => c.classList.remove('active'));
+        contents[fileIndex].classList.add('active');
+      });
+    });
+  }
+
   appendToEditPreview(token) {
     // Add token to buffer
     this.editPreviewBuffer += token;
@@ -514,10 +632,22 @@ export class AIManager {
     }
   }
 
-  acceptEdit() {
+  async acceptEdit() {
     if (!this.currentEditResult) return;
     
-    const diff = this.currentEditResult.diff;
+    const result = this.currentEditResult;
+    
+    // Check if multi-file edit
+    if (result.type === 'multi-file') {
+      await this.acceptMultiFileEdit(result);
+    } else {
+      // Single file edit (legacy)
+      await this.acceptSingleFileEdit(result);
+    }
+  }
+
+  async acceptSingleFileEdit(result) {
+    const diff = result.diff;
     if (!diff || !diff.hasChanges) {
       this.editor.showMessage('No changes to apply');
       return;
@@ -545,6 +675,72 @@ export class AIManager {
     this.editor.isDirty = true;
     this.editor.updateStatusBar();
     this.editor.showMessage('Edit applied successfully');
+    
+    // Reset edit view
+    this.editResultSection.style.display = 'none';
+    this.editInstruction.value = '';
+    this.editInstruction.focus();
+  }
+
+  async acceptMultiFileEdit(result) {
+    if (!result.hasChanges) {
+      this.editor.showMessage('No changes to apply');
+      return;
+    }
+    
+    const filesWithChanges = result.files.filter(f => f.hasChanges);
+    
+    if (filesWithChanges.length === 0) {
+      this.editor.showMessage('No changes to apply');
+      return;
+    }
+    
+    // Apply changes to all files
+    let appliedCount = 0;
+    const errors = [];
+    
+    for (const file of filesWithChanges) {
+      try {
+        const filePath = file.filePath;
+        const newContent = file.diff.newText;
+        
+        // Check if file is currently open in editor
+        if (this.editor.currentFile === filePath) {
+          // Update current file
+          this.saveEditState();
+          this.editor.setEditorContent(newContent);
+          this.editor.isDirty = true;
+          appliedCount++;
+        } else {
+          // Check if file is in buffer manager
+          const buffer = this.editor.bufferManager?.getBufferByPath(filePath);
+          if (buffer) {
+            // Update buffer content
+            buffer.content = newContent;
+            buffer.isDirty = true;
+            appliedCount++;
+          } else {
+            // File not open - save directly to filesystem
+            await backendProvider.saveFile(filePath, newContent);
+            appliedCount++;
+          }
+        }
+      } catch (error) {
+        console.error(`[AIManager] Error applying edit to ${file.filePath}:`, error);
+        errors.push({ file: file.filePath, error: error.message });
+      }
+    }
+    
+    // Update UI
+    this.editor.updateStatusBar();
+    
+    // Show result message
+    if (errors.length > 0) {
+      this.editor.showMessage(`Applied ${appliedCount}/${filesWithChanges.length} file edits. ${errors.length} error(s).`);
+      console.error('[AIManager] Errors applying edits:', errors);
+    } else {
+      this.editor.showMessage(`Successfully applied edits to ${appliedCount} file(s)`);
+    }
     
     // Reset edit view
     this.editResultSection.style.display = 'none';
@@ -607,27 +803,184 @@ export class AIManager {
   }
 
   // ============================================================================
+  // File Attachment Methods
+  // ============================================================================
+
+  async addFile() {
+    const filePath = await this.selectFile();
+    if (!filePath) return; // User cancelled
+    
+    const attachedFiles = this.currentMode === 'chat' ? this.chatAttachedFiles : this.editAttachedFiles;
+    
+    if (!attachedFiles.includes(filePath)) {
+      attachedFiles.push(filePath);
+      this.updateFileChips();
+    }
+  }
+
+  removeFile(filePath) {
+    if (this.currentMode === 'chat') {
+      this.chatAttachedFiles = this.chatAttachedFiles.filter(f => f !== filePath);
+    } else {
+      this.editAttachedFiles = this.editAttachedFiles.filter(f => f !== filePath);
+    }
+    this.updateFileChips();
+  }
+
+  updateFileChips() {
+    const attachedFiles = this.currentMode === 'chat' ? this.chatAttachedFiles : this.editAttachedFiles;
+    
+    // Clear existing chips
+    this.filesChips.innerHTML = '';
+    
+    // Show/hide container based on whether there are files
+    if (attachedFiles.length > 0) {
+      this.filesContainer.style.display = 'flex';
+      
+      // Create chips for each file
+      attachedFiles.forEach(filePath => {
+        const chip = document.createElement('div');
+        chip.className = 'ai-file-chip';
+        
+        const fileName = filePath.split('/').pop();
+        
+        chip.innerHTML = `
+          <span class="ai-file-chip-name" title="${this.escapeHtml(filePath)}">${this.escapeHtml(fileName)}</span>
+          <button class="ai-file-chip-remove" title="Remove file">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        `;
+        
+        const removeBtn = chip.querySelector('.ai-file-chip-remove');
+        removeBtn.addEventListener('click', () => {
+          this.removeFile(filePath);
+        });
+        
+        this.filesChips.appendChild(chip);
+      });
+    } else {
+      this.filesContainer.style.display = 'none';
+    }
+  }
+
+  async selectFile() {
+    // Use the fuzzy finder to select a file
+    return new Promise((resolve) => {
+      if (this.editor.fuzzyFinder) {
+        // Set temporary callback for file selection
+        this.editor.fuzzyFinder.tempCallback = (filePath) => {
+          resolve(filePath);
+        };
+        
+        // Open the fuzzy finder
+        this.editor.fuzzyFinder.open();
+      } else {
+        // Fallback: prompt for file path
+        const filePath = prompt('Enter file path:');
+        resolve(filePath);
+      }
+    });
+  }
+
+  // ============================================================================
   // Helper Methods
   // ============================================================================
 
-  gatherContext() {
-    const context = {
-      filePath: this.editor.currentFile,
-      content: this.editor.getEditorContent(),
-      language: this.editor.currentLanguage,
-      cursorPosition: this.editor.getCursorPosition()
-    };
+  async gatherContext() {
+    const mode = this.currentMode;
+    const attachedFiles = mode === 'chat' ? this.chatAttachedFiles : this.editAttachedFiles;
     
-    const selection = this.getSelection();
-    if (selection) {
-      context.selection = {
-        start: { line: 0, character: selection.start },
-        end: { line: 0, character: selection.end },
-        text: selection.text
-      };
+    // Build context with multiple files
+    const contexts = [];
+    
+    for (const filePath of attachedFiles) {
+      // Get file content
+      let content = '';
+      let language = 'javascript';
+      
+      // Check if it's the current file
+      if (filePath === this.editor.currentFile) {
+        content = this.editor.getEditorContent();
+        language = this.editor.currentLanguage;
+      } else {
+        // Check if file is in buffer manager
+        const buffer = this.editor.bufferManager?.getBufferByPath(filePath);
+        if (buffer) {
+          content = buffer.content;
+          language = buffer.language;
+        } else {
+          // Load file from backend
+          try {
+            const fileData = await backendProvider.loadFile(filePath);
+            content = fileData.content;
+            language = this.detectLanguage(filePath);
+          } catch (error) {
+            console.error(`[AIManager] Failed to load file ${filePath}:`, error);
+            content = '// Failed to load file';
+          }
+        }
+      }
+      
+      contexts.push({
+        filePath,
+        content,
+        language
+      });
     }
     
-    return context;
+    // Add cursor position and selection for the current file
+    const currentFileContext = contexts.find(c => c.filePath === this.editor.currentFile);
+    if (currentFileContext) {
+      currentFileContext.cursorPosition = this.editor.getCursorPosition();
+      
+      const selection = this.getSelection();
+      if (selection) {
+        currentFileContext.selection = {
+          start: { line: 0, character: selection.start },
+          end: { line: 0, character: selection.end },
+          text: selection.text
+        };
+      }
+    }
+    
+    return { files: contexts };
+  }
+
+  detectLanguage(filePath) {
+    const ext = filePath.split('.').pop().toLowerCase();
+    const languageMap = {
+      'js': 'javascript',
+      'jsx': 'javascript',
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'py': 'python',
+      'java': 'java',
+      'c': 'c',
+      'cpp': 'cpp',
+      'h': 'c',
+      'hpp': 'cpp',
+      'go': 'go',
+      'rs': 'rust',
+      'rb': 'ruby',
+      'php': 'php',
+      'swift': 'swift',
+      'kt': 'kotlin',
+      'cs': 'csharp',
+      'html': 'html',
+      'css': 'css',
+      'scss': 'scss',
+      'json': 'json',
+      'xml': 'xml',
+      'md': 'markdown',
+      'sh': 'bash',
+      'yaml': 'yaml',
+      'yml': 'yaml',
+      'toml': 'toml',
+      'sql': 'sql'
+    };
+    return languageMap[ext] || 'plaintext';
   }
 
   getSelection() {

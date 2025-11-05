@@ -456,6 +456,42 @@ i
 - ❌ No unnecessary features
 - ✅ Extensible foundation
 
+## 🤖 AI Features
+
+XLR8 includes powerful AI-powered coding assistance:
+
+### Ask/Chat Mode (`Ctrl+Shift+A`)
+- **Conversational AI**: Ask questions about your code
+- **Multi-file context**: Attach multiple files for context-aware answers
+- **Markdown rendering**: Beautiful formatted responses with code highlighting
+- **Persistent chat history**: Conversations saved per file
+
+### Edit Mode (`Ctrl+Shift+E`) 
+- **AI-powered code editing**: Describe changes in natural language
+- **Multi-file editing**: Modify multiple files in a single edit ✨ NEW
+- **Diff preview**: Review changes before applying
+- **Smart file handling**: Updates open buffers or saves directly to disk
+
+**Multi-File Editing Examples:**
+```vim
+# Move function between files
+"Move validateEmail from app.js to utils.js and update imports"
+
+# Refactor across files  
+"Extract Avatar component from UserProfile.jsx into Avatar.jsx"
+
+# Update multiple files
+"Update all API calls to use new auth header format"
+```
+
+See [MULTI_FILE_EDITING.md](MULTI_FILE_EDITING.md) for detailed documentation.
+
+### Local LLM
+- **Privacy-first**: Runs locally using Qwen2.5-Coder-7B
+- **No internet required**: All inference happens on your machine
+- **GPU accelerated**: Uses GPU when available
+- **Streaming responses**: Real-time token streaming for instant feedback
+
 ## 🚧 Future Enhancements
 
 ### Phase 5: Project-Wide Search ✅ COMPLETED
@@ -465,6 +501,13 @@ i
 - [x] Jump to matches
 - [ ] Backend file system search (currently client-side mock)
 - [ ] `:vimgrep /pattern/ **/*.js` - Vim-style grep with globs
+
+### Phase 6: Multi-File AI Editing ✅ COMPLETED
+- [x] Multi-file context in edit mode
+- [x] Structured JSON response format
+- [x] Tabbed diff view for multiple files
+- [x] Batch apply changes to multiple files
+- [x] Smart file handling (buffers + filesystem)
 
 ### Future Ideas
 - [ ] Find references
@@ -477,6 +520,8 @@ i
 - [ ] Plugin system
 - [ ] Configuration file (`~/.xlr8rc`)
 - [ ] Themes
+- [ ] AI: File creation (currently only modifies existing files)
+- [ ] AI: Automatic dependency detection
 
 ## 🤝 Contributing
 
@@ -496,10 +541,12 @@ A **professional-grade code editor** with:
 ✅ Multifile buffer system  
 ✅ Visual tab management  
 ✅ Fuzzy file finder (Ctrl+P)  
-✅ Project-wide search (Ctrl+Shift+F) 🆕  
+✅ Project-wide search (Ctrl+Shift+F)  
 ✅ Go to definition (gd) - cross-file navigation  
 ✅ Syntax highlighting (15+ languages)  
 ✅ LSP integration (autocomplete, diagnostics, definitions)  
+✅ AI-powered code editing with **multi-file support** 🆕  
+✅ Local LLM inference (privacy-first, no internet required)  
 ✅ Beautiful, modern UI  
 ✅ Fast and lightweight  
 

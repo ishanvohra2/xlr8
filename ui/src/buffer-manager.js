@@ -170,6 +170,16 @@ export class BufferManager {
   }
 
   /**
+   * Gets buffer by file path
+   * @param {string} filePath - Path to search for
+   * @returns {Object|null} buffer object or null if not found
+   */
+  getBufferByPath(filePath) {
+    const bufferId = this.findBufferByPath(filePath);
+    return bufferId ? this.buffers.get(bufferId) : null;
+  }
+
+  /**
    * Gets buffer by ID
    * @param {number} bufferId
    * @returns {Object|null}

@@ -1,4 +1,4 @@
-const { loadModel, completion, unloadModel } = require('@tetherto/qvac-sdk');
+const { loadModel, completion, unloadModel } = require('@qvac/sdk');
 
 /**
  * InferenceManager - Handles AI inference for ask/edit features
@@ -8,12 +8,12 @@ class InferenceManager {
 
     constructor() {
         this.modelConfig = {
-            ctx_size: 4096,
+            ctx_size: 8192,
             device: 'gpu',
         }
         this.modelPath = 'https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q2_k.gguf'
         this.modelId = null;
-        this.maxContextTokens = 4096;
+        this.maxContextTokens = 8192;
         
         // System prompts for different modes
         this.systemPrompts = {
@@ -22,11 +22,11 @@ class InferenceManager {
 When answering questions:
 - Be concise but thorough
 - Provide specific examples when helpful
-- Reference line numbers when discussing code
+- Reference line numbers and file names when discussing code
 - Suggest improvements if relevant
 - If you're not sure, say so
 
-Current file context will be provided. Use it to give accurate, context-aware answers.`,
+Multiple file contexts may be provided. Use all provided context to give accurate, context-aware answers.`,
 
             edit: `You are an expert code editor. Your role is to modify code based on user instructions.
 
@@ -36,13 +36,34 @@ When editing code:
 - Add comments for complex changes
 - Ensure changes are syntactically correct
 - Be surgical - change only what's necessary
+- You can edit ONE or MULTIPLE files as needed to fulfill the instruction
 
-IMPORTANT: Respond with ONLY the modified code. Do NOT include:
-- Line numbers (the context shows line numbers for reference, but your output should not have them)
-- Explanations (unless there are critical caveats)
-- Extra formatting or markdown (plain code only, or wrap in a single code block)
+IMPORTANT OUTPUT FORMAT:
+You MUST respond with a JSON object in the following format:
 
-The user will see a diff, so be precise with your edits.`
+{
+  "files": [
+    {
+      "filePath": "path/to/file1.js",
+      "newContent": "complete modified file content here"
+    },
+    {
+      "filePath": "path/to/file2.js", 
+      "newContent": "complete modified file content here"
+    }
+  ],
+  "explanation": "Brief explanation of changes (optional)"
+}
+
+Rules:
+- Include ONLY files that need to be modified
+- Provide the COMPLETE new content for each file (not just the changed lines)
+- Use the exact file paths from the context provided
+- Do NOT include line numbers in the code
+- Ensure valid JSON format
+- If only one file needs editing, still use the JSON format with a single file in the array
+
+Multiple file contexts are provided. Edit whichever files are necessary to complete the instruction.`
         };
     }
 
@@ -76,11 +97,17 @@ The user will see a diff, so be precise with your edits.`
 
     /**
      * Build context string from file and conversation
-     * @param {Object} context - Context object
+     * @param {Object} context - Context object (can contain single file or multiple files)
      * @param {boolean} includeLineNumbers - Whether to include line numbers (default: true)
      * @returns {string} Formatted context string
      */
     buildContextString(context, includeLineNumbers = true) {
+        // Handle multi-file context
+        if (context.files && Array.isArray(context.files)) {
+            return this.buildMultiFileContextString(context.files, includeLineNumbers);
+        }
+        
+        // Handle single file context (legacy)
         const parts = [];
         
         if (context.filePath) {
@@ -120,6 +147,69 @@ The user will see a diff, so be precise with your edits.`
         }
         
         return parts.join('\n');
+    }
+
+    /**
+     * Build context string for multiple files with token management
+     * @param {Array} files - Array of file objects
+     * @param {boolean} includeLineNumbers - Whether to include line numbers
+     * @returns {string} Formatted context string
+     */
+    buildMultiFileContextString(files, includeLineNumbers = true) {
+        const parts = [];
+        const maxTokensPerFile = Math.floor((this.maxContextTokens * 0.5) / files.length); // Use 50% of context for files
+        
+        files.forEach((file, index) => {
+            const fileParts = [];
+            
+            // File header
+            fileParts.push(`\n=== File ${index + 1}: ${file.filePath} ===`);
+            
+            if (file.language) {
+                fileParts.push(`Language: ${file.language}`);
+            }
+            
+            if (file.content) {
+                let content = file.content;
+                
+                // Truncate content if it exceeds token limit
+                const estimatedTokens = this.estimateTokens(content);
+                if (estimatedTokens > maxTokensPerFile) {
+                    // Truncate to fit within limit
+                    const maxChars = maxTokensPerFile * 4; // Approximate chars from tokens
+                    content = content.substring(0, maxChars) + '\n... (truncated)';
+                }
+                
+                if (includeLineNumbers) {
+                    const lines = content.split('\n');
+                    const lineNumbers = lines.map((line, idx) => `${idx + 1}: ${line}`).join('\n');
+                    fileParts.push(`\nCode:\n\`\`\`${file.language || ''}\n${lineNumbers}\n\`\`\``);
+                } else {
+                    fileParts.push(`\nCode:\n\`\`\`${file.language || ''}\n${content}\n\`\`\``);
+                }
+            }
+            
+            // Add selection and cursor info for current file
+            if (file.selection && file.selection.text) {
+                if (includeLineNumbers) {
+                    fileParts.push(`\nSelected code (lines ${file.selection.start.line + 1}-${file.selection.end.line + 1}):\n\`\`\`${file.language || ''}\n${file.selection.text}\n\`\`\``);
+                } else {
+                    fileParts.push(`\nSelected code:\n\`\`\`${file.language || ''}\n${file.selection.text}\n\`\`\``);
+                }
+            }
+            
+            if (file.cursorPosition && includeLineNumbers) {
+                fileParts.push(`\nCursor at line ${file.cursorPosition.line + 1}, character ${file.cursorPosition.character + 1}`);
+            }
+            
+            if (file.diagnostics && file.diagnostics.length > 0) {
+                fileParts.push(`\nCurrent issues:\n${file.diagnostics.map(d => `- Line ${d.line}: ${d.message}`).join('\n')}`);
+            }
+            
+            parts.push(fileParts.join('\n'));
+        });
+        
+        return parts.join('\n\n');
     }
 
     /**
