@@ -249,16 +249,17 @@ export class FuzzyFinder {
     const selectedFile = this.filteredFiles[this.selectedIndex];
     console.log('[FuzzyFinder] Selected file:', selectedFile.path);
     
-    // Close finder
-    this.close();
-    
-    // Check if there's a temporary callback (used for AI file attachment)
+    // Check if there's a temporary callback BEFORE closing (used for AI file attachment)
     if (this.tempCallback) {
       const callback = this.tempCallback;
       this.tempCallback = null; // Clear callback
+      this.close(); // Close finder after saving callback
       callback(selectedFile.path);
       return;
     }
+    
+    // Close finder
+    this.close();
     
     // Open file in editor (default behavior)
     try {

@@ -204,7 +204,6 @@ export class AIManager {
     
     this.currentMode = mode;
     this.panel.classList.add('active');
-    this.panel.style.display = 'flex';
     
     // Hide floating action buttons when panel is open
     this.toolbar.style.display = 'none';
@@ -217,18 +216,24 @@ export class AIManager {
     if (mode === 'chat') {
       this.panelTitleText.textContent = 'Chat';
       this.newChatBtn.style.display = 'flex';
-      // Initialize with current file attached
-      if (this.chatAttachedFiles.length === 0 && this.editor.currentFile) {
+      // Ensure current file is in attached files
+      if (this.chatAttachedFiles.length === 0) {
         this.chatAttachedFiles = [this.editor.currentFile];
+      } else if (!this.chatAttachedFiles.includes(this.editor.currentFile)) {
+        // Add to beginning of array
+        this.chatAttachedFiles.unshift(this.editor.currentFile);
       }
       this.updateFileChips();
       await this.showChatList();
     } else if (mode === 'edit') {
       this.panelTitleText.textContent = 'Edit with AI';
       this.newChatBtn.style.display = 'none';
-      // Initialize with current file attached
-      if (this.editAttachedFiles.length === 0 && this.editor.currentFile) {
+      // Ensure current file is in attached files
+      if (this.editAttachedFiles.length === 0) {
         this.editAttachedFiles = [this.editor.currentFile];
+      } else if (!this.editAttachedFiles.includes(this.editor.currentFile)) {
+        // Add to beginning of array
+        this.editAttachedFiles.unshift(this.editor.currentFile);
       }
       this.updateFileChips();
       this.showEditView();
@@ -241,9 +246,8 @@ export class AIManager {
     // Show floating action buttons again
     this.toolbar.style.display = 'flex';
     
+    // Reset views after animation completes
     setTimeout(() => {
-      this.panel.style.display = 'none';
-      // Reset views
       this.chatList.style.display = 'none';
       this.chatView.style.display = 'none';
       this.editView.style.display = 'none';

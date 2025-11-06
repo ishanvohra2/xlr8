@@ -84,7 +84,7 @@
   </div>
 
   <!-- AI Panel (unified for chat and edit) -->
-  <div id="ai-panel" class="ai-panel" style="display: none;">
+  <div id="ai-panel" class="ai-panel">
     <div class="ai-panel-header">
       <div class="ai-header-left">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="ai-icon">
@@ -111,6 +111,17 @@
         </button>
       </div>
     </div>
+
+    <!-- Shared File Chips (for both chat and edit modes) -->
+    <div id="ai-files-container" class="ai-files-container" style="display: none;">
+      <div class="ai-files-label">Attached Files:</div>
+      <div id="ai-files-chips" class="ai-files-chips"></div>
+      <button id="ai-add-file-btn" class="ai-add-file-btn" title="Add file">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M6 1V11M1 6H11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
     
     <!-- Chat List View -->
     <div id="ai-chat-list" class="ai-chat-list" style="display: none;">
@@ -133,16 +144,6 @@
       
       <!-- Fixed input at bottom -->
       <div class="ai-input-container">
-        <!-- Shared file chips -->
-        <div id="ai-files-container" class="ai-files-container" style="display: none;">
-          <div class="ai-files-label">Attached Files:</div>
-          <div id="ai-files-chips" class="ai-files-chips"></div>
-          <button id="ai-add-file-btn" class="ai-add-file-btn" title="Add file">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M6 1V11M1 6H11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </button>
-        </div>
         <div class="ai-input-wrapper">
           <textarea id="ai-chat-input" class="ai-input-field" placeholder="Ask about your code..." rows="1"></textarea>
           <button id="ai-send-btn" class="ai-send-btn" title="Send (Ctrl+Enter)">
@@ -196,7 +197,7 @@
 
       <!-- Fixed input at bottom -->
       <div class="ai-input-container">
-        <!-- Shared file chips (same as chat) -->
+        <!-- Note: File chips are shared and managed by JS (same container for both chat and edit) -->
         <div class="ai-input-wrapper">
           <textarea id="ai-edit-instruction" class="ai-input-field" placeholder="Describe the changes you want to make..." rows="1"></textarea>
           <button id="ai-generate-edit-btn" class="ai-send-btn" title="Generate (Ctrl+Enter)">
